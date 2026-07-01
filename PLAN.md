@@ -2,107 +2,116 @@
 
 ## Problem
 
-I run multiple Claude Code sessions at once, often with the terminal windows hidden or
-on another display. I can't tell at a glance whether a session is busy working, blocked
-waiting for my input/permission, or done. I want a single always-visible on-screen
-indicator — a traffic light — that tells me the aggregate status of all my live Claude
-sessions so I know when to go look at a window.
+I run multiple Claude Code sessions at once, often with the terminal windows hidden or on
+another display. I can't tell at a glance whether a session is busy working, waiting on me,
+or blocked on a permission prompt. I want a single always-visible on-screen traffic light
+that shows the aggregate status of all my live Claude sessions so I know when to go look at a
+window.
 
-## Core idea
+Glossary of terms (Session, Status, Blocked/Your Turn/Working/Idle, Aggregate Status, Light,
+Reporter, Overlay) lives in [CONTEXT.md](./CONTEXT.md). Decisions are recorded in
+[docs/adr/](./docs/adr/).
 
-Claude Code fires **hooks** at lifecycle events (session start/end, prompt submitted,
-tool about to run, notification/permission, turn finished). We install a tiny hook
-command that, on each event, writes the current session's status to a small JSON file in
-a shared directory. A lightweight desktop **overlay** watches that directory, aggregates
-every session's status into one color, and renders a red/yellow/green traffic light that
-floats on top of everything.
+## Architecture
 
 ```
-Claude Code session ──hook──▶ ~/.claude-traffic-light/sessions/<session_id>.json
-Claude Code session ──hook──▶ ~/.claude-traffic-light/sessions/<session_id>.json
-                                          │  (file watch)
-                                          ▼
-                             Overlay app  ──aggregate──▶  🔴 / 🟡 / 🟢
+Claude Code session ──hook──▶ reporter <status> ──▶ ~/.claude-traffic-light/sessions/<session_id>.json
+Claude Code session ──hook──▶ reporter <status> ──▶ ~/.claude-traffic-light/sessions/<session_id>.json
+                                                              │  (FSEvents watch + periodic sweep)
+                                                              ▼
+                                                   Overlay (aggregate + prune) ──▶  🔴 / 🟡 / 🟢
 ```
 
-No polling of Claude internals, no scraping terminals — hooks are the supported,
-event-driven source of truth.
+Hooks are the supported, event-driven source of truth — no scraping terminals, no polling
+Claude internals. The Reporter is stateless: each hook just writes the session's current
+Status (latest event wins). The Overlay reads every session file, prunes dead sessions, and
+lights the lamp for the worst-wins Aggregate Status.
+
+## Status model (decided)
+
+Per [ADR 0001](./docs/adr/0001-color-model.md) — the **split** model:
+
+| Status      | Lamp        | Meaning                                             |
+|-------------|-------------|-----------------------------------------------------|
+| Blocked     | 🔴 red      | Waiting on a permission/approval prompt (urgent)    |
+| Your Turn   | 🟡 yellow   | Finished its response, awaiting my next message     |
+| Working     | 🟢 green    | Actively running (thinking / executing tools)       |
+| Idle / none | all dim     | Freshly started with no prompt yet, or no sessions  |
+
+- **Aggregate:** worst-wins priority `Blocked > Your Turn > Working > Idle`. One lamp lit.
+- **Single color only** — no counts, no per-session list. (Masking the lower states is
+  accepted; it's a glanceable indicator.)
+- **Static** — no pulse, no sound, no notification on red. Solid color change only.
+- **Persist until closed** — a finished session stays Your Turn (yellow) until the next
+  prompt or `SessionEnd`; no time-based demotion. Yellow is truthful.
+
+## Detection (decided)
+
+Per [ADR 0003](./docs/adr/0003-hook-driven-detection.md). Event → Status routing, via
+matchers in `~/.claude/settings.json`:
+
+| Hook (matcher)                          | Status         |
+|-----------------------------------------|----------------|
+| `SessionStart`                          | Idle           |
+| `UserPromptSubmit` / `PreToolUse` / `PostToolUse` | Working |
+| `Notification` (`permission_prompt`)    | Blocked        |
+| `Notification` (`idle_prompt`) / `Stop` | Your Turn      |
+| `SessionEnd`                            | remove file    |
+
+Known gaps we design around: no "permission answered" event (Blocked is overwritten by the
+next event); no idle hook (hence persist-until-closed); `SessionEnd` can be missed on a crash.
+
+**Staleness pruning:** liveness first — the Reporter records the Claude process id and the
+Overlay prunes when `kill(pid, 0)` shows it's gone. Backstop — a ~12h inactivity TTL only for
+sessions where a plausible pid couldn't be resolved. Never false-prunes a live waiter; clears
+stuck reds.
 
 ## Components
 
-1. **Hook reporter** — a single small script (Node or shell) invoked by Claude Code
-   hooks. Reads the hook JSON from stdin (`session_id`, `cwd`, `hook_event_name`,
-   `transcript_path`), maps the event to a status, and writes
-   `~/.claude-traffic-light/sessions/<session_id>.json`:
-   `{ session_id, cwd, status, updated_at, pid? }`.
+1. **Reporter** — a small Swift CLI (`reporter <status>`), same SwiftPM package as the app.
+   Invoked by every hook. Reads `session_id` + records the Claude pid (grandparent of the
+   hook process, sanity-checked) + a timestamp from the hook JSON on stdin; writes/removes
+   `~/.claude-traffic-light/sessions/<session_id>.json`. Compiled → ~5–10ms cold start.
 
-2. **Installer** — writes the hook entries into `~/.claude/settings.json` (merging, not
-   clobbering) so every Claude Code session reports automatically. Also an uninstaller.
+2. **Installer** — writes the hook entries into `~/.claude/settings.json` (merge,
+   non-destructive) so every session reports, plus an uninstaller that removes them. Likely a
+   `reporter install` / `reporter uninstall` subcommand.
 
-3. **Overlay app** — always-on-top, frameless, transparent floating window showing the
-   three lights. Watches the sessions dir, aggregates, re-renders. Draggable; remembers
-   position. Quit/settings via a tray/menu-bar item or right-click.
+3. **Overlay** — native Swift/SwiftUI app. Borderless, non-activating, always-on-top floating
+   panel; `LSUIElement` (no Dock icon, no menu-bar item). Renders the three-lamp traffic
+   light. Draggable and remembers its position; joins all Spaces. Right-click menu: Quit,
+   Reset position. Watches the sessions dir (FSEvents/DispatchSource) and runs a periodic
+   sweep (~5–10s) for liveness/TTL pruning. **Manual launch** (build the `.app`, open it).
 
-4. **Aggregator** — pure logic: read all session files, drop stale ones, compute the one
-   winning color by priority.
+4. **Aggregator** — pure logic shared by the Overlay: read session files, prune dead ones,
+   compute the worst-wins Aggregate Status, map to the lit lamp.
 
-## Event → status mapping (hook reporter)
+## Scope
 
-| Claude Code hook     | Status written        |
-|----------------------|-----------------------|
-| `SessionStart`       | `idle`                |
-| `UserPromptSubmit`   | `working`             |
-| `PreToolUse`         | `working`             |
-| `Notification`       | `needs_input`         |
-| `Stop`               | `needs_input` *(your turn — finished its response)* |
-| `SessionEnd`         | remove file           |
+All Claude Code sessions for this user on this Mac (global hooks in `~/.claude/settings.json`).
+No per-project filtering — the point is to see everything at once. Local only; not
+cross-machine.
 
-## Color semantics (RECOMMENDED — first thing to grill)
+## Milestones
 
-Attention model — the more alarming the color, the more it wants me:
-
-- 🔴 **Red** — at least one session **needs me**: blocked on a permission/approval prompt,
-  or finished its turn and waiting for my reply. → go to that window.
-- 🟡 **Yellow** — at least one session is **actively working** (and none need me). → wait.
-- 🟢 **Green** — nothing needs me and nothing is running (all idle/ended, or none open). → relax.
-
-**Aggregation:** worst-wins priority `needs_input (red) > working (yellow) > idle (green)`
-across all live sessions.
-
-## Open design decisions (the grilling agenda)
-
-1. **Color meaning.** Is the attention model above right, or do you want "green = go/running,
-   red = stopped/blocked" (the literal traffic-light metaphor)? Should "finished, awaiting
-   reply" be the same red as "blocked on permission," or a distinct state/color?
-2. **Overlay vs menu bar.** A floating traffic-light window (as asked) vs a colored dot in
-   the macOS menu bar (more native, never occludes content). Or both.
-3. **Single light vs per-session detail.** One aggregate light only, or also a way to see
-   which/how many sessions are in each state (count badge, hover, click-to-expand list with
-   cwd names)?
-4. **Tech stack.** Electron (fastest, familiar web stack, heavy) vs Tauri (tiny, needs Rust)
-   vs native Swift menu-bar app (tiniest/most native, Swift) vs Python menu-bar (rumps).
-5. **Staleness / crash handling.** A session that crashes never fires `SessionEnd`. TTL on
-   session files? Heartbeat? Check the pid is alive?
-6. **Scope of "sessions."** All Claude Code sessions on this machine, or filter to specific
-   projects/cwds? Only this user, only local (not SSH)?
-7. **Interaction.** Draggable? Click-through when idle? Click a light to focus/raise the
-   relevant terminal window (hard — needs window management)? Sound/flash on red?
-8. **Reporter language & footprint.** Shell script vs Node. Startup cost matters — the hook
-   runs on every tool call.
-9. **Distribution.** Just runs on my Mac from source (npm start / launchd), or packaged
-   `.app` + login-item autostart?
-10. **Multi-display / spaces.** Which display does it live on; should it show on all Spaces?
-
-## Rough milestones
-
-- **M1 — spike the signal.** Hook reporter + installer; confirm the JSON files change state
-  correctly as a real session runs. `tail`/log the aggregate color. No UI yet.
-- **M2 — the light.** Minimal always-on-top overlay reading the aggregate, three lights.
-- **M3 — robustness.** Staleness/crash handling, multi-session correctness, position memory.
-- **M4 — polish.** Per-session detail, tray menu, autostart, packaging.
+- **M1 — signal.** Reporter + Installer. Verify the per-session JSON files transition through
+  Blocked / Working / Your Turn / Idle correctly as a real session runs; log the computed
+  Aggregate Status to stdout. No UI yet.
+- **M2 — the light.** Minimal always-on-top three-lamp panel reading the aggregate. Draggable
+  + position memory.
+- **M3 — robustness.** Liveness + TTL pruning, multi-session correctness, non-activating /
+  all-Spaces polish, right-click menu.
+- **M4 — packaging.** `.app` build + install/README docs.
 
 ## Non-goals (initial)
 
-- Not a Claude Code TUI replacement or a session manager — display only.
+- Not a Claude Code TUI replacement or session manager — display only.
 - Not cross-machine / not a hosted service — one Mac, local files.
 - No history/analytics — current status only.
+- No auto-start, no counts/per-session list, no red escalation (pulse/sound/notification).
+  All are easy to add later if wanted.
+
+## Deferred micro-decisions (sensible defaults, easily changed)
+
+Exact lamp colors/size, window default position, sweep interval, the status-dir path, and
+whether the installer is a CLI subcommand vs a shell script — settle these during M1/M2.
