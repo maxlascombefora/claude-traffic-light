@@ -2,6 +2,9 @@ node_modules/
 dist/
 build/
 out/
+.build/
+.swiftpm/
+Package.resolved
 .DS_Store
 *.log
 .env

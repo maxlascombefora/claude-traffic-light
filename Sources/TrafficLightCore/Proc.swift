@@ -1,0 +1,33 @@
+import Darwin
+import Foundation
+
+/// Is `pid` a live process? Uses signal 0, which sends nothing but reports reachability.
+public func processAlive(_ pid: Int32) -> Bool {
+    guard pid > 0 else { return false }
+    if kill(pid, 0) == 0 { return true }
+    // EPERM means the process exists but we may not signal it — still alive.
+    return errno == EPERM
+}
+
+/// The parent pid of `pid`, via sysctl KERN_PROC. nil if it can't be read.
+public func parentPID(of pid: Int32) -> Int32? {
+    var info = kinfo_proc()
+    var size = MemoryLayout<kinfo_proc>.stride
+    var mib: [Int32] = [CTL_KERN, KERN_PROC, KERN_PROC_PID, pid]
+    let rc = sysctl(&mib, u_int(mib.count), &info, &size, nil, 0)
+    guard rc == 0, size > 0 else { return nil }
+    return info.kp_eproc.e_ppid
+}
+
+/// The short command name (p_comm) of `pid`, e.g. "claude", "node", "sh".
+public func processName(_ pid: Int32) -> String? {
+    var info = kinfo_proc()
+    var size = MemoryLayout<kinfo_proc>.stride
+    var mib: [Int32] = [CTL_KERN, KERN_PROC, KERN_PROC_PID, pid]
+    let rc = sysctl(&mib, u_int(mib.count), &info, &size, nil, 0)
+    guard rc == 0, size > 0 else { return nil }
+    return withUnsafeBytes(of: &info.kp_proc.p_comm) { raw -> String? in
+        guard let base = raw.baseAddress else { return nil }
+        return String(cString: base.assumingMemoryBound(to: CChar.self))
+    }
+}

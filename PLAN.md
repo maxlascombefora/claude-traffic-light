@@ -94,14 +94,19 @@ cross-machine.
 
 ## Milestones
 
-- **M1 — signal.** Reporter + Installer. Verify the per-session JSON files transition through
-  Blocked / Working / Your Turn / Idle correctly as a real session runs; log the computed
-  Aggregate Status to stdout. No UI yet.
-- **M2 — the light.** Minimal always-on-top three-lamp panel reading the aggregate. Draggable
-  + position memory.
-- **M3 — robustness.** Liveness + TTL pruning, multi-session correctness, non-activating /
-  all-Spaces polish, right-click menu.
-- **M4 — packaging.** `.app` build + install/README docs.
+- **M1 — signal. ✅** Reporter (`reporter`) + Installer (`reporter install/uninstall`).
+  Verified: per-session JSON files transition through Blocked / Working / Your Turn / Idle;
+  `reporter aggregate` logs the computed Aggregate Status. Installer merges non-destructively,
+  is idempotent, and uninstalls cleanly.
+- **M2 — the light. ✅** Always-on-top three-lamp `NSPanel` (`TrafficLight`) reading the
+  aggregate every 1s. Draggable with position memory.
+- **M3 — robustness. ~mostly done.** Liveness + 12h-TTL pruning, multi-session worst-wins,
+  non-activating / all-Spaces / `LSUIElement`, right-click menu (Quit / Reset Position). Still
+  poll-based (1s) rather than FSEvents — fine for now.
+- **M4 — packaging.** Currently runs via `swift run` (see README). A bundled `.app` +
+  code-signing is the remaining step; auto-start was deliberately skipped.
+
+Not yet built: FSEvents watch (vs the 1s poll), a `.app` bundle. Both optional.
 
 ## Non-goals (initial)
 
