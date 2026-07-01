@@ -55,10 +55,13 @@ To remove them:
 swift run reporter uninstall
 ```
 
-**2. Launch the overlay:**
+**2. Launch the overlay.** Either package it as a real app (recommended) or run from source:
 
 ```sh
-swift run TrafficLight
+scripts/build-app.sh     # builds "Claude Traffic Light.app" → ~/Applications, indexed by Spotlight
+# then launch from Spotlight: type "Claude Traffic Light"
+
+swift run TrafficLight    # …or just run it from source (for development)
 ```
 
 - No Dock icon or menu-bar item — just the floating light, on all Spaces.
@@ -66,7 +69,8 @@ swift run TrafficLight
 - **Right-click** for *Reset Position* and *Quit*.
 
 Open Claude Code sessions and the light tracks them. Launch is manual by design — leave the
-app open; there's no auto-start.
+app open; there's no auto-start. To update the app after pulling changes, re-run
+`scripts/build-app.sh`.
 
 ## Verify
 
