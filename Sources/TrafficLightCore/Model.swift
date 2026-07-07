@@ -32,6 +32,10 @@ public struct SessionRecord: Codable, Sendable {
     /// Unix epoch seconds of the last update.
     public var updatedAt: Double
     public var cwd: String?
+    /// Whether the owning process has a controlling terminal — i.e. is a real window rather
+    /// than headless automation (`claude -p`). `false` is excluded from the Light. nil on
+    /// older records or when no pid could be resolved (treated as interactive).
+    public var interactive: Bool?
 
     enum CodingKeys: String, CodingKey {
         case sessionId = "session_id"
@@ -40,15 +44,17 @@ public struct SessionRecord: Codable, Sendable {
         case pidStart = "pid_start"
         case updatedAt = "updated_at"
         case cwd
+        case interactive
     }
 
     public init(sessionId: String, status: Status, pid: Int32?, pidStart: Double? = nil,
-                updatedAt: Double, cwd: String?) {
+                updatedAt: Double, cwd: String?, interactive: Bool? = nil) {
         self.sessionId = sessionId
         self.status = status
         self.pid = pid
         self.pidStart = pidStart
         self.updatedAt = updatedAt
         self.cwd = cwd
+        self.interactive = interactive
     }
 }

@@ -17,6 +17,9 @@ public func isLive(
     alive: (Int32) -> Bool = processAlive,
     startTime: (Int32) -> Double? = processStartTime
 ) -> Bool {
+    // Headless automation (no controlling terminal) never drives the Light, even while its
+    // process is alive — the Light reflects real windows. nil (unknown) is treated as a window.
+    if r.interactive == false { return false }
     if let pid = r.pid {
         guard alive(pid) else { return false }
         // Fingerprinted record: require the pid to still be the same process. If we can't

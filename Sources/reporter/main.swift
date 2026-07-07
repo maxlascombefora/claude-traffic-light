@@ -51,7 +51,10 @@ func report(_ status: Status) {
         pid: proc?.pid,
         pidStart: proc?.start,
         updatedAt: Date().timeIntervalSince1970,
-        cwd: json["cwd"] as? String
+        cwd: json["cwd"] as? String,
+        // A resolved process with no controlling terminal is headless automation (claude -p);
+        // exclude it from the Light. Unknown (no pid) stays nil → treated as a real window.
+        interactive: proc.map { hasControllingTerminal($0.pid) }
     )
     Paths.ensureDir(Paths.sessionsDir)
     let encoder = JSONEncoder()

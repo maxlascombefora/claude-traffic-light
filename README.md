@@ -22,6 +22,10 @@ status to `~/.claude-traffic-light/sessions/<session_id>.json`. The **overlay** 
 directory (1s poll), prunes dead sessions (process-liveness, with a 12h TTL backstop), and
 lights the lamp for the aggregate status.
 
+Only **real terminal windows** drive the Light: the reporter records whether the owning process
+has a controlling terminal, and headless automation (`claude -p`, e.g. background agents) is
+ignored so it never pins the Light while you work in a window.
+
 ## Requirements
 
 macOS + a Swift toolchain. Xcode Command Line Tools is enough (`xcode-select --install`);
