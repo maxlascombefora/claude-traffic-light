@@ -41,17 +41,19 @@ Products: `TrafficLight` (the overlay app) and `reporter` (the hook CLI + instal
 
 ## Run
 
-**One command (build + hooks + overlay, auto-cleanup on quit):**
+**One command (build + hooks + overlay):**
 
 ```sh
-scripts/run.sh
+scripts/run.sh              # quit leaves hooks installed (other windows keep reporting)
+scripts/run.sh --teardown   # throwaway run: also uninstall hooks + clear state on quit
 ```
 
-Builds the release binaries, installs the hooks, and launches the overlay in the foreground.
-When you quit the light (right-click → *Quit*, or Ctrl-C in the terminal), it automatically
-removes the hooks and clears transient state — leaving your machine as it was. Good for a
-throwaway run; for a persistent install that survives reboots, use the manual steps below and
-package the `.app`.
+Builds the release binaries, installs the hooks (idempotent), and launches the overlay in the
+foreground. On quit (right-click → *Quit*, or Ctrl-C) the overlay stops. By default the hooks
+are **left installed** — they're global and harmless, and removing them would stop reporting
+for your other Claude windows and freeze the Light on a stale colour. Use `--teardown` for a
+throwaway run that fully cleans up, or `reporter uninstall` to remove hooks explicitly. For a
+persistent install that survives reboots, use the manual steps below and package the `.app`.
 
 The manual steps, if you'd rather run them individually:
 
