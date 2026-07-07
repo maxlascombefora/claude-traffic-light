@@ -37,6 +37,20 @@ Products: `TrafficLight` (the overlay app) and `reporter` (the hook CLI + instal
 
 ## Run
 
+**One command (build + hooks + overlay, auto-cleanup on quit):**
+
+```sh
+scripts/run.sh
+```
+
+Builds the release binaries, installs the hooks, and launches the overlay in the foreground.
+When you quit the light (right-click → *Quit*, or Ctrl-C in the terminal), it automatically
+removes the hooks and clears transient state — leaving your machine as it was. Good for a
+throwaway run; for a persistent install that survives reboots, use the manual steps below and
+package the `.app`.
+
+The manual steps, if you'd rather run them individually:
+
 **1. Wire up the hooks** (edits `~/.claude/settings.json`):
 
 ```sh
