@@ -31,3 +31,17 @@ public func processName(_ pid: Int32) -> String? {
         return String(cString: base.assumingMemoryBound(to: CChar.self))
     }
 }
+
+/// The process start time (Unix epoch seconds) of `pid`, via sysctl KERN_PROC. nil if it
+/// can't be read. A pid + start-time pair uniquely fingerprints a process: after the OS
+/// recycles a pid, the new process has a different start time, so a stale record no longer
+/// matches. This is what lets liveness survive pid reuse.
+public func processStartTime(_ pid: Int32) -> Double? {
+    var info = kinfo_proc()
+    var size = MemoryLayout<kinfo_proc>.stride
+    var mib: [Int32] = [CTL_KERN, KERN_PROC, KERN_PROC_PID, pid]
+    let rc = sysctl(&mib, u_int(mib.count), &info, &size, nil, 0)
+    guard rc == 0, size > 0 else { return nil }
+    let tv = info.kp_proc.p_un.__p_starttime
+    return Double(tv.tv_sec) + Double(tv.tv_usec) / 1_000_000
+}

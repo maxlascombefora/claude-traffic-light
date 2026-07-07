@@ -13,14 +13,15 @@ func readHookJSON() -> [String: Any]? {
 
 /// The Claude process that owns this session = the grandparent of the hook process
 /// (Claude → sh -c → reporter). We only trust a candidate whose name looks like Claude,
-/// otherwise we record no pid and let the TTL backstop handle staleness.
-func resolveClaudePID() -> Int32? {
+/// otherwise we record no pid and let the TTL backstop handle staleness. The start time is
+/// captured alongside the pid to fingerprint the exact process against later pid reuse.
+func resolveClaudeProcess() -> (pid: Int32, start: Double?)? {
     let shell = getppid()
     let candidates = [parentPID(of: shell), shell].compactMap { $0 }
     for pid in candidates {
         if let name = processName(pid)?.lowercased(),
            name.contains("claude") || name.contains("node") {
-            return pid
+            return (pid, processStartTime(pid))
         }
     }
     return nil
@@ -29,10 +30,12 @@ func resolveClaudePID() -> Int32? {
 func report(_ status: Status) {
     guard let json = readHookJSON(),
           let sid = json["session_id"] as? String, !sid.isEmpty else { return }
+    let proc = resolveClaudeProcess()
     let record = SessionRecord(
         sessionId: sid,
         status: status,
-        pid: resolveClaudePID(),
+        pid: proc?.pid,
+        pidStart: proc?.start,
         updatedAt: Date().timeIntervalSince1970,
         cwd: json["cwd"] as? String
     )

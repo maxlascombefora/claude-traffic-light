@@ -43,5 +43,24 @@ check(!isLive(rec(.yourTurn, pid: nil, ageSeconds: defaultTTLSeconds + 1), now: 
 check(isLive(rec(.yourTurn, pid: 99, ageSeconds: defaultTTLSeconds * 10), now: now, alive: allAlive),
       "live pid never expires by age (persist-until-closed)")
 
+print("pid reuse:")
+func fpRec(_ status: Status, pid: Int32, start: Double) -> SessionRecord {
+    SessionRecord(sessionId: UUID().uuidString, status: status, pid: pid, pidStart: start,
+                  updatedAt: now, cwd: nil)
+}
+check(isLive(fpRec(.yourTurn, pid: 802, start: 500), now: now,
+             alive: allAlive, startTime: { _ in 500 }),
+      "fingerprint matches: same process stays live")
+check(!isLive(fpRec(.yourTurn, pid: 802, start: 500), now: now,
+              alive: allAlive, startTime: { _ in 999 }),
+      "fingerprint mismatch: recycled pid reads as dead")
+check(isLive(fpRec(.working, pid: 802, start: 500), now: now,
+             alive: allAlive, startTime: { _ in nil }),
+      "unreadable start time stays lenient (not pruned)")
+check(aggregate([fpRec(.yourTurn, pid: 802, start: 500), rec(.working, pid: 7)],
+                now: now, alive: allAlive,
+                startTime: { pid in pid == 7 ? 500 : 999 }) == .working,
+      "stale your-turn on recycled pid no longer forces yellow")
+
 print(failures == 0 ? "\nALL PASSED" : "\n\(failures) FAILED")
 exit(failures == 0 ? 0 : 1)
