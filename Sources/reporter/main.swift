@@ -11,18 +11,32 @@ func readHookJSON() -> [String: Any]? {
     return (try? JSONSerialization.jsonObject(with: data)) as? [String: Any]
 }
 
-/// The Claude process that owns this session = the grandparent of the hook process
-/// (Claude → sh -c → reporter). We only trust a candidate whose name looks like Claude,
-/// otherwise we record no pid and let the TTL backstop handle staleness. The start time is
-/// captured alongside the pid to fingerprint the exact process against later pid reuse.
+/// Process names (kinfo p_comm) we treat as pass-through wrappers between the hook and the
+/// Claude session, and step over when resolving the owning process.
+let wrapperNames: Set<String> = [
+    "sh", "-sh", "bash", "-bash", "zsh", "-zsh", "dash", "fish", "ksh", "csh", "tcsh",
+    "login", "env",
+]
+
+/// The Claude session process that owns this hook = the NEAREST ancestor of the reporter
+/// that isn't a shell/login wrapper. We can't match by name: Claude Code's own process name
+/// (kinfo p_comm) is its CLI *version string* (e.g. "2.1.203"), not "claude". But hooks are
+/// always spawned `claude → sh -c → reporter`, so the first non-wrapper ancestor is the
+/// session. "Nearest" is load-bearing — it stops below launchers like openclaw's long-lived
+/// `node` gateway, which sits ABOVE the session and would otherwise be recorded as a shared,
+/// immortal pid that pins every session live forever. The start time is captured alongside
+/// to fingerprint the exact process against later pid reuse.
 func resolveClaudeProcess() -> (pid: Int32, start: Double?)? {
-    let shell = getppid()
-    let candidates = [parentPID(of: shell), shell].compactMap { $0 }
-    for pid in candidates {
-        if let name = processName(pid)?.lowercased(),
-           name.contains("claude") || name.contains("node") {
+    var pid = getppid()
+    var hops = 0
+    while pid > 1, hops < 12 {
+        let name = (processName(pid) ?? "").lowercased()
+        if !name.isEmpty, !wrapperNames.contains(name) {
             return (pid, processStartTime(pid))
         }
+        guard let parent = parentPID(of: pid), parent != pid else { break }
+        pid = parent
+        hops += 1
     }
     return nil
 }
