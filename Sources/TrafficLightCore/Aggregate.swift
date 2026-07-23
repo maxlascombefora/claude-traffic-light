@@ -32,6 +32,28 @@ public func isLive(
     return (now - r.updatedAt) <= ttl
 }
 
+/// Apply Mutes to a set of live records. A Mute maps a `session_id` to the Status the Session
+/// held when it was muted; it is *bound to that Status value* (see CONTEXT.md / Mute). This
+/// returns the records that still contribute to the Light plus the pruned Mute map: an entry
+/// is dropped when its Session has vanished or when its current Status differs from the muted
+/// value — so a Mute auto-clears the instant the Session's Status changes, and a later return
+/// to that same Status is a fresh Status that nags again.
+///
+/// Pure and liveness-agnostic: callers pass records they already consider live.
+public func applyMutes(
+    _ records: [SessionRecord],
+    mutes: [String: Status]
+) -> (contributing: [SessionRecord], mutes: [String: Status]) {
+    var statusById: [String: Status] = [:]
+    for r in records { statusById[r.sessionId] = r.status }
+    var kept: [String: Status] = [:]
+    for (id, mutedStatus) in mutes where statusById[id] == mutedStatus {
+        kept[id] = mutedStatus
+    }
+    let contributing = records.filter { kept[$0.sessionId] == nil }
+    return (contributing, kept)
+}
+
 /// Worst-wins aggregate Status across live records; `.idle` when nothing is live.
 public func aggregate(
     _ records: [SessionRecord],

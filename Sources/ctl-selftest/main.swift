@@ -75,5 +75,83 @@ check(aggregate([rec(.yourTurn, pid: 1, interactive: false),
                 now: now, alive: allAlive) == .working,
       "headless your-turn (openclaw) no longer forces yellow over a real working window")
 
+print("mute filter:")
+func srec(_ id: String, _ status: Status) -> SessionRecord {
+    SessionRecord(sessionId: id, status: status, pid: 1, updatedAt: now, cwd: nil)
+}
+let blockedA = srec("a", .blocked)
+let workingB = srec("b", .working)
+
+let muteBlocked = applyMutes([blockedA, workingB], mutes: ["a": .blocked])
+check(muteBlocked.contributing.map(\.sessionId) == ["b"],
+      "muted session excluded from the contributing set")
+check(aggregate(muteBlocked.contributing, now: now, alive: allAlive) == .working,
+      "muting the sole blocked session drops the Light to working")
+check(muteBlocked.mutes["a"] == .blocked, "still-matching mute is retained")
+
+let statusMoved = applyMutes([srec("a", .working), workingB], mutes: ["a": .blocked])
+check(statusMoved.mutes["a"] == nil,
+      "mute clears when status differs from the muted value (bind-to-value)")
+check(statusMoved.contributing.count == 2, "a cleared-mute session contributes again")
+
+let vanished = applyMutes([workingB], mutes: ["a": .blocked])
+check(vanished.mutes["a"] == nil, "mute for a vanished session is dropped")
+
+let twoYellow = applyMutes([srec("y1", .yourTurn), srec("y2", .yourTurn)], mutes: ["y1": .yourTurn])
+check(aggregate(twoYellow.contributing, now: now, alive: allAlive) == .yourTurn,
+      "muting one of two yellows leaves the Light yellow")
+
+let allMuted = applyMutes([blockedA, srec("b2", .working)],
+                          mutes: ["a": .blocked, "b2": .working])
+check(aggregate(allMuted.contributing, now: now, alive: allAlive) == .idle,
+      "muting every contributor dims the Light")
+
+print("auto-resume:")
+check(willAutoResume(hookJSON: ["background_tasks": [["id": "x", "status": "running"]]]),
+      "running background task => session resumes on its own")
+check(willAutoResume(hookJSON: ["background_tasks": [["id": "x"]]]),
+      "task with no status assumed running")
+check(!willAutoResume(hookJSON: ["background_tasks": [["id": "x", "status": "completed"]]]),
+      "completed background task does not hold green")
+check(willAutoResume(hookJSON: ["session_crons": [["id": "c"]]]),
+      "scheduled wakeup => session resumes on its own")
+check(!willAutoResume(hookJSON: ["background_tasks": [], "session_crons": []]),
+      "empty arrays => your turn")
+check(!willAutoResume(hookJSON: ["session_id": "s"]),
+      "payload without the arrays (older CLI) => your turn")
+
+print("session title:")
+let fm = FileManager.default
+let titleRoot = fm.temporaryDirectory
+    .appendingPathComponent("ctl-title-\(ProcessInfo.processInfo.globallyUniqueString)", isDirectory: true)
+let projDir = titleRoot.appendingPathComponent("-Users-me-project", isDirectory: true)
+try? fm.createDirectory(at: projDir, withIntermediateDirectories: true)
+
+let titleSid = "11111111-2222-3333-4444-555555555555"
+let transcript = """
+{"type":"mode","sessionId":"\(titleSid)"}
+{"type":"ai-title","aiTitle":"First title","sessionId":"\(titleSid)"}
+{"type":"user"}
+{"type":"ai-title","aiTitle":"Latest title","sessionId":"\(titleSid)"}
+"""
+try? transcript.write(to: projDir.appendingPathComponent("\(titleSid).jsonl"),
+                      atomically: true, encoding: .utf8)
+
+check(SessionTitle.read(sessionId: titleSid, projectsDir: titleRoot) == "Latest title",
+      "reads the last ai-title in the transcript")
+check(SessionTitle.read(sessionId: "no-such-id", projectsDir: titleRoot) == nil,
+      "missing transcript => nil")
+// Escape attempt: `..` resolves back to the real file on disk; sanitizing the id blocks it.
+check(SessionTitle.read(sessionId: "../-Users-me-project/\(titleSid)", projectsDir: titleRoot) == nil,
+      "path-separator id cannot escape the projects dir")
+
+let noTitleSid = "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"
+try? "{\"type\":\"user\"}".write(to: projDir.appendingPathComponent("\(noTitleSid).jsonl"),
+                                 atomically: true, encoding: .utf8)
+check(SessionTitle.read(sessionId: noTitleSid, projectsDir: titleRoot) == nil,
+      "transcript without an ai-title => nil")
+
+try? fm.removeItem(at: titleRoot)
+
 print(failures == 0 ? "\nALL PASSED" : "\n\(failures) FAILED")
 exit(failures == 0 ? 0 : 1)

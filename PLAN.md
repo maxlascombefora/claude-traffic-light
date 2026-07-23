@@ -79,9 +79,12 @@ stuck reds.
 
 3. **Overlay** — native Swift/SwiftUI app. Borderless, non-activating, always-on-top floating
    panel; `LSUIElement` (no Dock icon, no menu-bar item). Renders the three-lamp traffic
-   light. Draggable and remembers its position; joins all Spaces. Right-click menu: Quit,
-   Reset position. Watches the sessions dir (FSEvents/DispatchSource) and runs a periodic
-   sweep (~5–10s) for liveness/TTL pruning. **Manual launch** (build the `.app`, open it).
+   light. Draggable and remembers its position; joins all Spaces. Right-click **Sessions Menu**:
+   a header showing the current Aggregate Status, then every live Session with the colour it's
+   contributing and its Title (from Claude's transcript — see [ADR 0004](./docs/adr/0004-session-titles-from-transcript.md)),
+   click a row to **Mute**/un-Mute it, plus Reset Position and Quit. Watches the sessions dir
+   (FSEvents/DispatchSource) and runs a periodic sweep (~5–10s) for liveness/TTL pruning.
+   **Manual launch** (build the `.app`, open it).
 
 4. **Aggregator** — pure logic shared by the Overlay: read session files, prune dead ones,
    compute the worst-wins Aggregate Status, map to the lit lamp.
@@ -106,6 +109,13 @@ cross-machine.
 - **M4 — packaging.** Currently runs via `swift run` (see README). A bundled `.app` +
   code-signing is the remaining step; auto-start was deliberately skipped.
 
+- **M5 — Sessions Menu + Mute. ✅** Right-click lists every live interactive Session with its
+  contributing colour and Title, worst-wins ordered. Click a row to Mute it — excluded from the
+  Aggregate Status until its Status changes (bind-to-value; Overlay-local, in-memory). Titles
+  read lazily from Claude's transcript ([ADR 0004](./docs/adr/0004-session-titles-from-transcript.md)),
+  falling back to cwd basename. Titles are read off the main thread into a background-warmed
+  cache so the menu opens instantly. Covered by `ctl-selftest` mute-filter cases.
+
 Not yet built: FSEvents watch (vs the 1s poll), a `.app` bundle. Both optional.
 
 ## Non-goals (initial)
@@ -113,8 +123,10 @@ Not yet built: FSEvents watch (vs the 1s poll), a `.app` bundle. Both optional.
 - Not a Claude Code TUI replacement or session manager — display only.
 - Not cross-machine / not a hosted service — one Mac, local files.
 - No history/analytics — current status only.
-- No auto-start, no counts/per-session list, no red escalation (pulse/sound/notification).
-  All are easy to add later if wanted.
+- No auto-start, no red escalation (pulse/sound/notification). Both easy to add later if wanted.
+- The **Light itself** stays a single colour — no counts, no per-session detail *on the lamp*.
+  (An on-demand per-session list does now live in the right-click Sessions Menu, where Muting
+  happens; it never clutters the glanceable Light.)
 
 ## Deferred micro-decisions (sensible defaults, easily changed)
 

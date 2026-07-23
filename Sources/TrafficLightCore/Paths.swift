@@ -17,6 +17,15 @@ public enum Paths {
     public static var sessionsDir: URL { baseDir.appendingPathComponent("sessions", isDirectory: true) }
     public static var binDir: URL { baseDir.appendingPathComponent("bin", isDirectory: true) }
 
+    /// Claude Code's per-project conversation transcripts, read only for Session Titles
+    /// (see ADR 0004). Override: CLAUDE_TRAFFIC_LIGHT_PROJECTS
+    public static var projectsDir: URL {
+        if let o = env["CLAUDE_TRAFFIC_LIGHT_PROJECTS"], !o.isEmpty {
+            return URL(fileURLWithPath: o, isDirectory: true)
+        }
+        return home.appendingPathComponent(".claude/projects", isDirectory: true)
+    }
+
     /// Claude Code's settings.json. Override: CLAUDE_TRAFFIC_LIGHT_SETTINGS
     public static var settingsPath: URL {
         if let o = env["CLAUDE_TRAFFIC_LIGHT_SETTINGS"], !o.isEmpty {

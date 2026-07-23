@@ -44,6 +44,10 @@ func resolveClaudeProcess() -> (pid: Int32, start: Double?)? {
 func report(_ status: Status) {
     guard let json = readHookJSON(),
           let sid = json["session_id"] as? String, !sid.isEmpty else { return }
+    // Stop also fires when a turn ends only to wait on background work — a run_in_background
+    // command (CI watch, server poll) or a scheduled wakeup — that re-invokes the session
+    // without the user. That's still Working: nothing needs them yet.
+    let status = (status == .yourTurn && willAutoResume(hookJSON: json)) ? .working : status
     let proc = resolveClaudeProcess()
     let record = SessionRecord(
         sessionId: sid,

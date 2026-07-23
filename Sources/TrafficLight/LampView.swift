@@ -72,12 +72,75 @@ final class LampView: NSView {
 
     override func menu(for event: NSEvent) -> NSMenu? {
         let menu = NSMenu()
-        menu.addItem(withTitle: "Reset Position", action: #selector(resetPosition), keyEquivalent: "")
-            .target = self
+        menu.autoenablesItems = false
+
+        let model = (NSApp.delegate as? AppDelegate)?.menuModel()
+        let aggregate = model?.aggregate ?? .idle
+        let sessions = model?.sessions ?? []
+
+        addDisabled(to: menu, "Light:  \(Self.dot(aggregate))  \(Self.name(aggregate))")
         menu.addItem(.separator())
-        menu.addItem(withTitle: "Quit Traffic Light", action: #selector(quit), keyEquivalent: "q")
-            .target = self
+
+        if sessions.isEmpty {
+            addDisabled(to: menu, "No active sessions")
+        } else {
+            for s in sessions {
+                let title = "\(Self.dot(s.status))  \(s.label)"
+                let item = NSMenuItem(title: title, action: #selector(toggleMute(_:)), keyEquivalent: "")
+                item.target = self
+                item.representedObject = s.id
+                item.isEnabled = true
+                if s.muted {
+                    item.state = .on
+                    item.attributedTitle = NSAttributedString(string: title, attributes: [
+                        .strikethroughStyle: NSUnderlineStyle.single.rawValue
+                    ])
+                }
+                menu.addItem(item)
+            }
+        }
+
+        menu.addItem(.separator())
+        addAction(to: menu, "Reset Position", #selector(resetPosition))
+        menu.addItem(.separator())
+        addAction(to: menu, "Quit Traffic Light", #selector(quit), key: "q")
         return menu
+    }
+
+    private func addDisabled(to menu: NSMenu, _ title: String) {
+        let item = NSMenuItem(title: title, action: nil, keyEquivalent: "")
+        item.isEnabled = false
+        menu.addItem(item)
+    }
+
+    private func addAction(to menu: NSMenu, _ title: String, _ action: Selector, key: String = "") {
+        let item = NSMenuItem(title: title, action: action, keyEquivalent: key)
+        item.target = self
+        item.isEnabled = true
+        menu.addItem(item)
+    }
+
+    private static func dot(_ s: Status) -> String {
+        switch s {
+        case .blocked: return "🔴"
+        case .yourTurn: return "🟡"
+        case .working: return "🟢"
+        case .idle: return "⚪"
+        }
+    }
+
+    private static func name(_ s: Status) -> String {
+        switch s {
+        case .blocked: return "Blocked"
+        case .yourTurn: return "Your Turn"
+        case .working: return "Working"
+        case .idle: return "Idle"
+        }
+    }
+
+    @objc private func toggleMute(_ sender: NSMenuItem) {
+        guard let id = sender.representedObject as? String else { return }
+        (NSApp.delegate as? AppDelegate)?.toggleMute(sessionId: id)
     }
 
     @objc private func resetPosition() {
