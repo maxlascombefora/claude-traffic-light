@@ -68,6 +68,19 @@ The on-screen indicator: three stacked lamps drawn like a real traffic light. Th
 the current Aggregate Status is lit; the others stay dim (all dim when nothing is lit).
 _Avoid_: widget, icon, indicator, dot.
 
+**Duplicate Light**:
+An additional Light on screen. Every Light shows the same Aggregate Status — Status belongs to
+the Sessions, not to any one Light — but each carries its own position and Lamp Diameter, so one
+can sit on each display, or several on one. There is always at least one; closing the last is
+not offered.
+_Avoid_: copy, clone, window, instance.
+
+**Lamp Diameter**:
+The size of one lamp, and the only dimension of the Light I can change. Everything else —
+padding, corner rounding, glow — is proportional to it, so resizing is a uniform scale: the
+Light looks the same at every size, only bigger or smaller. Remembered across launches.
+_Avoid_: zoom, window size (the window size follows from the Lamp Diameter).
+
 **Reporter**:
 The command Claude Code invokes on each hook event to write a Session's current Status.
 

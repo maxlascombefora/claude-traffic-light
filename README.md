@@ -86,7 +86,16 @@ swift run TrafficLight    # …or just run it from source (for development)
 
 - No Dock icon or menu-bar item — just the floating light, on all Spaces.
 - **Drag** it to reposition (position is remembered).
-- **Right-click** for *Reset Position* and *Quit*.
+- **Resize** by dragging any corner, or via right-click → *Size*. Everything scales together, so
+  it looks the same at any size; the corner opposite the one you drag stays put. Size is
+  remembered. (No hover cursor: macOS gives cursor control to the active app, and the overlay
+  never activates — that's what keeps clicking it from stealing your terminal's focus.)
+- **Duplicate** from the right-click menu to put a light on another screen (or a second one on
+  the same screen). With multiple displays, *Duplicate Light* becomes a per-screen submenu so the
+  copy lands there directly. Each light keeps its own position and size; they all show the same
+  status. *Close This Light* removes one — the last one can't be closed.
+- **Right-click** for the session list (click a row to mute/un-mute), *Size* presets,
+  *Reset Position*, *Duplicate Light*, *Close This Light*, and *Quit*.
 
 Open Claude Code sessions and the light tracks them. Launch is manual by design — leave the
 app open; there's no auto-start. To update the app after pulling changes, re-run

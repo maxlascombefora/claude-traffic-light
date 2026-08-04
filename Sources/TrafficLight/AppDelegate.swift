@@ -11,11 +11,10 @@ struct MenuSession {
 }
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
-    private var panel: NSPanel!
-    private var lampView: LampView!
+    /// Every on-screen Light. Always at least one — the Sessions Menu won't close the last.
+    private var lights: [Light] = []
     private var timer: Timer?
 
-    private let panelSize = NSSize(width: 46, height: 116)
     private let ttl = defaultTTLSeconds
 
     /// Muted Sessions: session_id → the Status it was muted at. Overlay-local and in-memory
@@ -40,28 +39,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         Paths.ensureDir(Paths.sessionsDir)
 
-        panel = NSPanel(
-            contentRect: NSRect(origin: .zero, size: panelSize),
-            styleMask: [.borderless, .nonactivatingPanel],
-            backing: .buffered,
-            defer: false
-        )
-        panel.level = .floating
-        panel.isFloatingPanel = true
-        panel.becomesKeyOnlyIfNeeded = true
-        panel.hidesOnDeactivate = false
-        panel.isMovableByWindowBackground = false
-        panel.isOpaque = false
-        panel.backgroundColor = .clear
-        panel.hasShadow = true
-        panel.collectionBehavior = [.canJoinAllSpaces, .stationary, .fullScreenAuxiliary]
-        panel.ignoresMouseEvents = false
-
-        lampView = LampView(frame: NSRect(origin: .zero, size: panelSize))
-        panel.contentView = lampView
-
-        restorePosition()
-        panel.orderFrontRegardless()
+        restoreLights()
 
         refresh()
         timer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] _ in
@@ -76,7 +54,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         muteMap = keptMutes
         liveRecords = live
         currentAggregate = aggregate(contributing, now: now, ttl: ttl)
-        lampView.status = currentAggregate
+        for light in lights { light.status = currentAggregate }
 
         // Warm Session Titles off the main thread: immediately at launch (tick 1), then every
         // ~5s. The Sessions Menu reads only the cache, so it never blocks on disk.
@@ -160,28 +138,80 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         return (currentAggregate, sessions)
     }
 
-    // MARK: - position
+    // MARK: - the set of Lights
 
-    func restorePosition() {
-        let defaults = UserDefaults.standard
-        if defaults.object(forKey: "originX") != nil {
-            panel.setFrameOrigin(NSPoint(x: defaults.double(forKey: "originX"),
-                                         y: defaults.double(forKey: "originY")))
-        } else if let visible = NSScreen.main?.visibleFrame {
-            panel.setFrameOrigin(NSPoint(x: visible.maxX - panelSize.width - 24,
-                                         y: visible.maxY - panelSize.height - 24))
+    /// More than one Light on screen? Governs whether *Close This Light* is available — the last
+    /// one can't be closed, or the app would be running with nothing to right-click.
+    var canCloseLights: Bool { lights.count > 1 }
+
+    /// Add another Light showing the same Status, positioned by `source` (beside itself on the
+    /// same screen, or at the default spot on another).
+    func duplicate(_ source: Light, on screen: NSScreen?) {
+        guard let screen = screen ?? source.screen ?? NSScreen.main else { return }
+        let origin = source.duplicateOrigin(on: screen, avoiding: lights.map(\.frame))
+        let light = Light(diameter: source.diameter, origin: origin, app: self)
+        light.status = currentAggregate
+        lights.append(light)
+        saveLights()
+    }
+
+    func close(_ light: Light) {
+        guard canCloseLights, let index = lights.firstIndex(where: { $0 === light }) else { return }
+        lights.remove(at: index)
+        light.close()
+        saveLights()
+    }
+
+    // MARK: - persistence
+
+    /// Lights are stored as one array of `{x, y, d}` — the whole set, rewritten on any change.
+    private static let lightsKey = "lights"
+
+    func saveLights() {
+        UserDefaults.standard.set(lights.map { $0.snapshot() }, forKey: Self.lightsKey)
+    }
+
+    /// Recreate the saved Lights, or a single default one on first run. Anything saved for a
+    /// screen that's since been unplugged is placed on the main screen instead, so a Light can
+    /// never come back invisible.
+    private func restoreLights() {
+        for spec in Self.savedSpecs() {
+            let size = LampMetrics.panelSize(diameter: spec.diameter)
+            let origin = Self.onscreenOrigin(spec.origin, size: size)
+            lights.append(Light(diameter: spec.diameter, origin: origin, app: self))
+        }
+        if lights.isEmpty, let screen = NSScreen.main {
+            let size = LampMetrics.panelSize(diameter: LampMetrics.defaultDiameter)
+            lights.append(Light(diameter: LampMetrics.defaultDiameter,
+                                origin: Light.defaultOrigin(on: screen, size: size),
+                                app: self))
         }
     }
 
-    func savePosition() {
-        let origin = panel.frame.origin
-        UserDefaults.standard.set(Double(origin.x), forKey: "originX")
-        UserDefaults.standard.set(Double(origin.y), forKey: "originY")
+    /// The saved set, falling back to the single-Light keys written by earlier versions.
+    private static func savedSpecs() -> [(origin: NSPoint?, diameter: CGFloat)] {
+        let defaults = UserDefaults.standard
+        if let saved = defaults.array(forKey: lightsKey) as? [[String: Double]], !saved.isEmpty {
+            return saved.map { entry in
+                let origin = entry["x"].flatMap { x in entry["y"].map { NSPoint(x: x, y: $0) } }
+                return (origin, LampMetrics.clamp(entry["d"] ?? LampMetrics.defaultDiameter))
+            }
+        }
+        let saved = (defaults.object(forKey: "lampDiameter") as? Double).map { CGFloat($0) }
+        let diameter = LampMetrics.clamp(saved ?? LampMetrics.defaultDiameter)
+        guard defaults.object(forKey: "originX") != nil else { return [] }
+        return [(NSPoint(x: defaults.double(forKey: "originX"),
+                         y: defaults.double(forKey: "originY")), diameter)]
     }
 
-    func resetPosition() {
-        UserDefaults.standard.removeObject(forKey: "originX")
-        UserDefaults.standard.removeObject(forKey: "originY")
-        restorePosition()
+    /// Keep a restored origin only if it still lands on a connected screen.
+    private static func onscreenOrigin(_ origin: NSPoint?, size: NSSize) -> NSPoint {
+        let fallbackScreen = NSScreen.main
+        guard let origin else {
+            return fallbackScreen.map { Light.defaultOrigin(on: $0, size: size) } ?? .zero
+        }
+        let frame = NSRect(origin: origin, size: size)
+        if NSScreen.screens.contains(where: { $0.frame.intersects(frame) }) { return origin }
+        return fallbackScreen.map { Light.defaultOrigin(on: $0, size: size) } ?? origin
     }
 }
