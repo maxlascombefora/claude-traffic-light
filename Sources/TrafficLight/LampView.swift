@@ -203,9 +203,21 @@ final class LampView: NSView {
         }
     }
 
+    /// Below this much total mouse travel, a mouseDown/mouseUp pair reads as a click rather than
+    /// a drag — generous enough to absorb hand tremor, tight enough that no intentional drag is
+    /// misread. See ADR 0005.
+    private static let clickThreshold: CGFloat = 4
+
     override func mouseUp(with event: NSEvent) {
         defer { dragRegion = nil }
+        let current = NSEvent.mouseLocation
+        let moved = hypot(current.x - dragStartMouse.x, current.y - dragStartMouse.y)
         light?.didMove()  // persists position and size for the whole set of Lights
+        // Only the body counts as a click target — a stray near-zero-movement tap on a resize
+        // corner shouldn't jump to a Session.
+        if dragRegion == .move, moved < Self.clickThreshold {
+            (NSApp.delegate as? AppDelegate)?.focusOldestMatchingCurrentColor()
+        }
     }
 
     // MARK: - right-click menu
@@ -225,18 +237,7 @@ final class LampView: NSView {
             addDisabled(to: menu, "No active sessions")
         } else {
             for s in sessions {
-                let title = "\(Self.dot(s.status))  \(s.label)"
-                let item = NSMenuItem(title: title, action: #selector(toggleMute(_:)), keyEquivalent: "")
-                item.target = self
-                item.representedObject = s.id
-                item.isEnabled = true
-                if s.muted {
-                    item.state = .on
-                    item.attributedTitle = NSAttributedString(string: title, attributes: [
-                        .strikethroughStyle: NSUnderlineStyle.single.rawValue
-                    ])
-                }
-                menu.addItem(item)
+                menu.addItem(sessionMenuItem(for: s))
             }
         }
 
@@ -251,6 +252,40 @@ final class LampView: NSView {
         menu.addItem(.separator())
         addAction(to: menu, "Quit Traffic Light", #selector(quit), key: "q")
         return menu
+    }
+
+    /// One Session's row: a submenu of *Focus* (jump to its terminal) and *Mute* (silence its
+    /// color), so the row no longer has to pick a single action for its click — see ADR 0005.
+    /// *Focus* is disabled when the Session has no recorded cwd, since it could never be matched
+    /// to a Ghostty terminal.
+    private func sessionMenuItem(for s: MenuSession) -> NSMenuItem {
+        let title = "\(Self.dot(s.status))  \(s.label)"
+        let row = NSMenuItem(title: title, action: nil, keyEquivalent: "")
+        row.isEnabled = true
+        if s.muted {
+            row.attributedTitle = NSAttributedString(string: title, attributes: [
+                .strikethroughStyle: NSUnderlineStyle.single.rawValue
+            ])
+        }
+
+        let submenu = NSMenu()
+        submenu.autoenablesItems = false
+
+        let focus = NSMenuItem(title: "Focus", action: #selector(focusSession(_:)), keyEquivalent: "")
+        focus.target = self
+        focus.representedObject = s.id
+        focus.isEnabled = !(s.cwd ?? "").isEmpty
+        submenu.addItem(focus)
+
+        let mute = NSMenuItem(title: "Mute", action: #selector(toggleMute(_:)), keyEquivalent: "")
+        mute.target = self
+        mute.representedObject = s.id
+        mute.isEnabled = true
+        mute.state = s.muted ? .on : .off
+        submenu.addItem(mute)
+
+        row.submenu = submenu
+        return row
     }
 
     /// *Duplicate Light* — a plain item with one screen, or a per-screen submenu with several, so
@@ -349,6 +384,11 @@ final class LampView: NSView {
     @objc private func toggleMute(_ sender: NSMenuItem) {
         guard let id = sender.representedObject as? String else { return }
         (NSApp.delegate as? AppDelegate)?.toggleMute(sessionId: id)
+    }
+
+    @objc private func focusSession(_ sender: NSMenuItem) {
+        guard let id = sender.representedObject as? String else { return }
+        (NSApp.delegate as? AppDelegate)?.focusSession(sessionId: id)
     }
 
     @objc private func applySize(_ sender: NSMenuItem) {

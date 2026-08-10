@@ -66,6 +66,18 @@ public func aggregate(
     return live.map(\.status).max(by: { $0.priority < $1.priority }) ?? .idle
 }
 
+/// The Session to jump to when a Light showing `color` is clicked: the oldest — by `changedAt`,
+/// falling back to `updatedAt` for records written before that field existed — Session whose
+/// Status is `color` among `contributing` (the post-Mute set already used for the aggregate).
+/// Filtered to a resolvable `cwd`, since a Session without one can never be matched to a Ghostty
+/// terminal (see `GhosttyFocus`); including it would let it permanently block the queue instead
+/// of ever reaching a focusable Session behind it. nil when nothing matches. See ADR 0005.
+public func focusCandidate(matching color: Status, in contributing: [SessionRecord]) -> SessionRecord? {
+    contributing
+        .filter { $0.status == color && !($0.cwd ?? "").isEmpty }
+        .min { ($0.changedAt ?? $0.updatedAt) < ($1.changedAt ?? $1.updatedAt) }
+}
+
 /// Read every session record on disk (skipping unreadable/garbage files).
 public func loadRecords(from dir: URL = Paths.sessionsDir) -> [SessionRecord] {
     let fm = FileManager.default

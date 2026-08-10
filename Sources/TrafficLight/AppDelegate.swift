@@ -8,6 +8,9 @@ struct MenuSession {
     let status: Status
     let label: String
     let muted: Bool
+    /// nil/empty when the Session has no recorded cwd — Focus is disabled for that row, since
+    /// there's no way to match it to a Ghostty terminal (see `GhosttyFocus`).
+    let cwd: String?
 }
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
@@ -22,6 +25,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var muteMap: [String: Status] = [:]
     /// Live records from the most recent refresh, reused to build the Sessions Menu on demand.
     private var liveRecords: [SessionRecord] = []
+    /// `liveRecords` with Muted Sessions removed — the same set the aggregate color is computed
+    /// from. Click-to-focus searches this, not `liveRecords`: a Muted Session must never be a
+    /// click target, or muting it would stop working the moment another Session shares its color.
+    private var contributingRecords: [SessionRecord] = []
     /// Aggregate Status from the most recent refresh (post-Mute), shown in the menu header.
     private var currentAggregate: Status = .idle
 
@@ -53,6 +60,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let (contributing, keptMutes) = applyMutes(live, mutes: muteMap)
         muteMap = keptMutes
         liveRecords = live
+        contributingRecords = contributing
         currentAggregate = aggregate(contributing, now: now, ttl: ttl)
         for light in lights { light.status = currentAggregate }
 
@@ -80,6 +88,26 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 self.titleCache = found
             }
         }
+    }
+
+    // MARK: - click-to-focus (ADR 0005)
+
+    /// A Light was clicked (not dragged): jump to the oldest live, unmuted Session whose Status
+    /// matches the color currently shown, so long as it has a resolvable cwd. No-op if there's no
+    /// such Session — every color is eligible, including Working/Idle ("which one's running?").
+    func focusOldestMatchingCurrentColor() {
+        guard let candidate = focusCandidate(matching: currentAggregate, in: contributingRecords),
+              let cwd = candidate.cwd, !cwd.isEmpty else { return }
+        GhosttyFocus.focus(cwd: cwd, titleHint: titleCache[candidate.sessionId])
+    }
+
+    /// Sessions Menu row → Focus: jump to that one specific Session directly, bypassing the
+    /// color queue. Works even when Muted — an explicit pick from the menu, unlike the ambient
+    /// click, isn't the ambient nagging Mute exists to silence.
+    func focusSession(sessionId: String) {
+        guard let record = liveRecords.first(where: { $0.sessionId == sessionId }),
+              let cwd = record.cwd, !cwd.isEmpty else { return }
+        GhosttyFocus.focus(cwd: cwd, titleHint: titleCache[sessionId])
     }
 
     // MARK: - Sessions Menu
@@ -127,7 +155,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 ? "\(row.base) (#\(row.rec.sessionId.prefix(4)))"
                 : row.base
             return MenuSession(id: row.rec.sessionId, status: row.rec.status, label: label,
-                               muted: muteMap[row.rec.sessionId] == row.rec.status)
+                               muted: muteMap[row.rec.sessionId] == row.rec.status, cwd: row.rec.cwd)
         }
         .sorted {
             $0.status.priority != $1.status.priority

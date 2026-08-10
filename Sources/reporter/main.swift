@@ -41,6 +41,13 @@ func resolveClaudeProcess() -> (pid: Int32, start: Double?)? {
     return nil
 }
 
+/// The record currently on disk for `sid`, if any — read so `report` can tell whether Status is
+/// actually changing before it overwrites `changedAt`.
+func existingRecord(_ sid: String) -> SessionRecord? {
+    guard let data = try? Data(contentsOf: Paths.sessionFile(sid)) else { return nil }
+    return try? JSONDecoder().decode(SessionRecord.self, from: data)
+}
+
 func report(_ status: Status) {
     guard let json = readHookJSON(),
           let sid = json["session_id"] as? String, !sid.isEmpty else { return }
@@ -49,16 +56,23 @@ func report(_ status: Status) {
     // without the user. That's still Working: nothing needs them yet.
     let status = (status == .yourTurn && willAutoResume(hookJSON: json)) ? .working : status
     let proc = resolveClaudeProcess()
+    let now = Date().timeIntervalSince1970
+    let previous = existingRecord(sid)
+    // changedAt carries forward across same-status updates (e.g. repeated PostToolUse while
+    // Working) and only resets when Status actually transitions — see ADR 0005. A previous
+    // record with no changedAt predates this field; its updatedAt is the best guess available.
+    let changedAt = (previous?.status == status) ? (previous?.changedAt ?? previous?.updatedAt) : now
     let record = SessionRecord(
         sessionId: sid,
         status: status,
         pid: proc?.pid,
         pidStart: proc?.start,
-        updatedAt: Date().timeIntervalSince1970,
+        updatedAt: now,
         cwd: json["cwd"] as? String,
         // A resolved process with no controlling terminal is headless automation (claude -p);
         // exclude it from the Light. Unknown (no pid) stays nil → treated as a real window.
-        interactive: proc.map { hasControllingTerminal($0.pid) }
+        interactive: proc.map { hasControllingTerminal($0.pid) },
+        changedAt: changedAt
     )
     Paths.ensureDir(Paths.sessionsDir)
     let encoder = JSONEncoder()

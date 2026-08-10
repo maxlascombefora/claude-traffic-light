@@ -26,5 +26,7 @@
     <true/>
     <key>NSPrincipalClass</key>
     <string>NSApplication</string>
+    <key>NSAppleEventsUsageDescription</key>
+    <string>Clicking a Light focuses the matching Claude Code session's Ghostty window.</string>
 </dict>
 </plist>

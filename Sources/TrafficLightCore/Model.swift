@@ -29,13 +29,21 @@ public struct SessionRecord: Codable, Sendable {
     /// process. On liveness check it must still match, so a recycled pid reads as dead.
     /// nil on older records (falls back to liveness-only, the pre-fingerprint behaviour).
     public var pidStart: Double?
-    /// Unix epoch seconds of the last update.
+    /// Unix epoch seconds of the last update — touched on *every* hook event, including repeat
+    /// events that don't change Status (e.g. `PostToolUse` firing on each tool call while
+    /// Working). Not usable as "how long has this Session been in its current Status" — see
+    /// `changedAt`.
     public var updatedAt: Double
     public var cwd: String?
     /// Whether the owning process has a controlling terminal — i.e. is a real window rather
     /// than headless automation (`claude -p`). `false` is excluded from the Light. nil on
     /// older records or when no pid could be resolved (treated as interactive).
     public var interactive: Bool?
+    /// Unix epoch seconds when `status` last actually changed (set by the Reporter, which reads
+    /// the prior record and carries this forward when the new status matches). nil on older
+    /// records written before this field existed. See ADR 0005 — this is what "oldest Session in
+    /// this color" (click-to-focus) sorts by, since `updatedAt` can't answer that.
+    public var changedAt: Double?
 
     enum CodingKeys: String, CodingKey {
         case sessionId = "session_id"
@@ -45,10 +53,11 @@ public struct SessionRecord: Codable, Sendable {
         case updatedAt = "updated_at"
         case cwd
         case interactive
+        case changedAt = "changed_at"
     }
 
     public init(sessionId: String, status: Status, pid: Int32?, pidStart: Double? = nil,
-                updatedAt: Double, cwd: String?, interactive: Bool? = nil) {
+                updatedAt: Double, cwd: String?, interactive: Bool? = nil, changedAt: Double? = nil) {
         self.sessionId = sessionId
         self.status = status
         self.pid = pid
@@ -56,5 +65,6 @@ public struct SessionRecord: Codable, Sendable {
         self.updatedAt = updatedAt
         self.cwd = cwd
         self.interactive = interactive
+        self.changedAt = changedAt
     }
 }

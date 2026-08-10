@@ -19,9 +19,9 @@ let allAlive: (Int32) -> Bool = { _ in true }
 let allDead: (Int32) -> Bool = { _ in false }
 
 func rec(_ status: Status, pid: Int32? = nil, ageSeconds: Double = 0,
-         interactive: Bool? = nil) -> SessionRecord {
+         interactive: Bool? = nil, changedAt: Double? = nil, cwd: String? = nil) -> SessionRecord {
     SessionRecord(sessionId: UUID().uuidString, status: status, pid: pid,
-                  updatedAt: now - ageSeconds, cwd: nil, interactive: interactive)
+                  updatedAt: now - ageSeconds, cwd: cwd, interactive: interactive, changedAt: changedAt)
 }
 
 print("aggregation:")
@@ -105,6 +105,28 @@ let allMuted = applyMutes([blockedA, srec("b2", .working)],
                           mutes: ["a": .blocked, "b2": .working])
 check(aggregate(allMuted.contributing, now: now, alive: allAlive) == .idle,
       "muting every contributor dims the Light")
+
+print("focus candidate:")
+check(focusCandidate(matching: .yourTurn, in: [
+    rec(.yourTurn, changedAt: 500, cwd: "/a"),
+    rec(.yourTurn, changedAt: 100, cwd: "/b"),
+    rec(.blocked, changedAt: 1, cwd: "/c"),
+]).map(\.cwd) == "/b",
+      "oldest changedAt among matching-color candidates wins")
+check(focusCandidate(matching: .yourTurn, in: [
+    rec(.yourTurn, changedAt: 1, cwd: nil),
+    rec(.yourTurn, changedAt: 500, cwd: "/b"),
+]).map(\.cwd) == "/b",
+      "cwd-less candidate skipped even though it's older, so the queue never gets stuck")
+check(focusCandidate(matching: .working, in: [rec(.yourTurn, cwd: "/a")]) == nil,
+      "no candidate of the requested color => nil")
+check(focusCandidate(matching: .yourTurn, in: []) == nil,
+      "no live sessions => nil")
+check(focusCandidate(matching: .yourTurn, in: [
+    rec(.yourTurn, ageSeconds: 10, cwd: "/a"),  // no changedAt: falls back to updatedAt (now - 10)
+    rec(.yourTurn, changedAt: now - 5, cwd: "/b"),
+]).map(\.cwd) == "/a",
+      "missing changedAt (pre-upgrade record) falls back to updatedAt for ordering")
 
 print("auto-resume:")
 check(willAutoResume(hookJSON: ["background_tasks": [["id": "x", "status": "running"]]]),
