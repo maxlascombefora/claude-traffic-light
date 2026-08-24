@@ -31,14 +31,6 @@ ignored so it never pins the Light while you work in a window.
 macOS + a Swift toolchain. Xcode Command Line Tools is enough (`xcode-select --install`);
 full Xcode is not required.
 
-## Build
-
-```sh
-swift build -c release
-```
-
-Products: `TrafficLight` (the overlay app) and `reporter` (the hook CLI + installer).
-
 ## Run
 
 **One command (build + hooks + overlay):**
@@ -51,13 +43,23 @@ scripts/run.sh --teardown   # throwaway run: also uninstall hooks + clear state 
 Builds the release binaries, installs the hooks (idempotent), and launches the overlay in the
 foreground. On quit (right-click → *Quit*, or Ctrl-C) the overlay stops. By default the hooks
 are **left installed** — they're global and harmless, and removing them would stop reporting
-for your other Claude windows and freeze the Light on a stale colour. Use `--teardown` for a
+for your other Claude windows and freeze the Light on a stale color. Use `--teardown` for a
 throwaway run that fully cleans up, or `reporter uninstall` to remove hooks explicitly. For a
 persistent install that survives reboots, use the manual steps below and package the `.app`.
 
-The manual steps, if you'd rather run them individually:
+### Manual steps
 
-**1. Wire up the hooks** (edits `~/.claude/settings.json`):
+If you'd rather run the steps individually:
+
+**1. Build the binaries:**
+
+```sh
+swift build -c release
+```
+
+This produces `TrafficLight` (the overlay app) and `reporter` (the hook CLI + installer).
+
+**2. Wire up the hooks** (edits `~/.claude/settings.json`):
 
 ```sh
 swift run reporter install
@@ -75,7 +77,7 @@ To remove them:
 swift run reporter uninstall
 ```
 
-**2. Launch the overlay.** Either package it as a real app (recommended) or run from source:
+**3. Launch the overlay.** Either package it as a real app (recommended) or run from source:
 
 ```sh
 scripts/build-app.sh     # builds "Claude Traffic Light.app" → ~/Applications, indexed by Spotlight

@@ -80,7 +80,7 @@ stuck reds.
 3. **Overlay** — native Swift/SwiftUI app. Borderless, non-activating, always-on-top floating
    panel; `LSUIElement` (no Dock icon, no menu-bar item). Renders the three-lamp traffic
    light. Draggable and remembers its position; joins all Spaces. Right-click **Sessions Menu**:
-   a header showing the current Aggregate Status, then every live Session with the colour it's
+   a header showing the current Aggregate Status, then every live Session with the color it's
    contributing and its Title (from Claude's transcript — see [ADR 0004](./docs/adr/0004-session-titles-from-transcript.md)),
    click a row to **Mute**/un-Mute it, plus Reset Position and Quit. Watches the sessions dir
    (FSEvents/DispatchSource) and runs a periodic sweep (~5–10s) for liveness/TTL pruning.
@@ -110,7 +110,7 @@ cross-machine.
   code-signing is the remaining step; auto-start was deliberately skipped.
 
 - **M5 — Sessions Menu + Mute. ✅** Right-click lists every live interactive Session with its
-  contributing colour and Title, worst-wins ordered. Click a row to Mute it — excluded from the
+  contributing color and Title, worst-wins ordered. Click a row to Mute it — excluded from the
   Aggregate Status until its Status changes (bind-to-value; Overlay-local, in-memory). Titles
   read lazily from Claude's transcript ([ADR 0004](./docs/adr/0004-session-titles-from-transcript.md)),
   falling back to cwd basename. Titles are read off the main thread into a background-warmed
@@ -124,7 +124,7 @@ Not yet built: FSEvents watch (vs the 1s poll), a `.app` bundle. Both optional.
 - Not cross-machine / not a hosted service — one Mac, local files.
 - No history/analytics — current status only.
 - No auto-start, no red escalation (pulse/sound/notification). Both easy to add later if wanted.
-- The **Light itself** stays a single colour — no counts, no per-session detail *on the lamp*.
+- The **Light itself** stays a single color — no counts, no per-session detail *on the lamp*.
   (An on-demand per-session list does now live in the right-click Sessions Menu, where Muting
   happens; it never clutters the glanceable Light.)
 
