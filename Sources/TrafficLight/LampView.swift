@@ -242,6 +242,8 @@ final class LampView: NSView {
         }
 
         menu.addItem(.separator())
+        menu.addItem(muteAllExceptMenuItem(sessions: sessions))
+        menu.addItem(.separator())
         menu.addItem(sizeMenuItem())
         addAction(to: menu, "Reset Position", #selector(resetPosition))
         menu.addItem(.separator())
@@ -286,6 +288,27 @@ final class LampView: NSView {
 
         row.submenu = submenu
         return row
+    }
+
+    /// *Mute All Except* — a submenu listing every live Session; picking one mutes the rest and
+    /// unmutes that one, for silencing everything but the Session you're currently watching.
+    /// Disabled with fewer than two Sessions, since there'd be nothing to mute.
+    private func muteAllExceptMenuItem(sessions: [MenuSession]) -> NSMenuItem {
+        let item = NSMenuItem(title: "Mute All Except", action: nil, keyEquivalent: "")
+        item.isEnabled = sessions.count > 1
+
+        let submenu = NSMenu()
+        submenu.autoenablesItems = false
+        for s in sessions {
+            let entry = NSMenuItem(title: "\(Self.dot(s.status))  \(s.label)",
+                                   action: #selector(muteAllExcept(_:)), keyEquivalent: "")
+            entry.target = self
+            entry.isEnabled = true
+            entry.representedObject = s.id
+            submenu.addItem(entry)
+        }
+        item.submenu = submenu
+        return item
     }
 
     /// *Duplicate Light* — a plain item with one screen, or a per-screen submenu with several, so
@@ -384,6 +407,11 @@ final class LampView: NSView {
     @objc private func toggleMute(_ sender: NSMenuItem) {
         guard let id = sender.representedObject as? String else { return }
         (NSApp.delegate as? AppDelegate)?.toggleMute(sessionId: id)
+    }
+
+    @objc private func muteAllExcept(_ sender: NSMenuItem) {
+        guard let id = sender.representedObject as? String else { return }
+        (NSApp.delegate as? AppDelegate)?.muteAllExcept(sessionId: id)
     }
 
     @objc private func focusSession(_ sender: NSMenuItem) {

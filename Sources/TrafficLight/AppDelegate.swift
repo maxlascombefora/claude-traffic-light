@@ -123,6 +123,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         refresh()
     }
 
+    /// Mute every live Session except `sessionId`: mute the rest at their current Status, and
+    /// unmute `sessionId` itself if it was muted. Refreshes immediately, like `toggleMute`.
+    func muteAllExcept(sessionId: String) {
+        for rec in liveRecords where rec.sessionId != sessionId {
+            muteMap[rec.sessionId] = rec.status
+        }
+        muteMap[sessionId] = nil
+        refresh()
+    }
+
     /// Build the Sessions Menu model from the last refresh's live records: label each Session
     /// (cached Title → cwd basename → id prefix), disambiguate collisions with a short id
     /// suffix, and sort by Status urgency (Blocked → Idle), ties broken by label.
