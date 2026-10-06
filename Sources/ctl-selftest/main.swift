@@ -128,6 +128,33 @@ check(focusCandidate(matching: .yourTurn, in: [
 ]).map(\.cwd) == "/a",
       "missing changedAt (pre-upgrade record) falls back to updatedAt for ordering")
 
+print("orphaned sessions:")
+func orec(_ id: String, pid: Int32 = 1, start: Double? = 100) -> SessionRecord {
+    SessionRecord(sessionId: id, status: .yourTurn, pid: pid, pidStart: start, updatedAt: now, cwd: nil)
+}
+let snap = GhosttyTTYSnapshot(ttys: ["/dev/ttys001"], takenAt: 500)
+let ttyByPid: (Int32) -> String? = { $0 == 1 ? "/dev/ttys001" : "/dev/ttys005" }
+let ghostty: (Int32) -> Bool = { _ in true }
+func kept(_ r: [SessionRecord], snapshot: GhosttyTTYSnapshot? = snap,
+          tty: @escaping (Int32) -> String? = ttyByPid,
+          underGhostty: @escaping (Int32) -> Bool = ghostty) -> [String] {
+    dropOrphans(r, snapshot: snapshot, tty: tty, underGhostty: underGhostty).map(\.sessionId)
+}
+check(kept([orec("open", pid: 1), orec("closed", pid: 2)]) == ["open"],
+      "session on a tty no Ghostty terminal has is dropped")
+check(kept([orec("closed", pid: 2)], snapshot: nil) == ["closed"],
+      "no snapshot (Ghostty without tty support) keeps every session")
+check(kept([orec("new", pid: 2, start: 600)]) == ["new"],
+      "process started after the snapshot is kept until the next snapshot")
+check(kept([orec("old", pid: 2, start: nil)]) == ["old"],
+      "record without pidStart is kept")
+check(kept([orec("vscode", pid: 2)], underGhostty: { _ in false }) == ["vscode"],
+      "session outside Ghostty is kept")
+check(kept([orec("unknown", pid: 2)], tty: { _ in nil }) == ["unknown"],
+      "unreadable tty is kept")
+check(kept([orec("closed", pid: 2)], snapshot: GhosttyTTYSnapshot(ttys: [], takenAt: 500)) == [],
+      "Ghostty with no terminals open drops its sessions")
+
 print("auto-resume:")
 check(willAutoResume(hookJSON: ["background_tasks": [["id": "x", "status": "running"]]]),
       "running background task => session resumes on its own")

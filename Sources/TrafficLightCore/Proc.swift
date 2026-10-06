@@ -58,3 +58,27 @@ public func processStartTime(_ pid: Int32) -> Double? {
     let tv = info.kp_proc.p_un.__p_starttime
     return Double(tv.tv_sec) + Double(tv.tv_usec) / 1_000_000
 }
+
+/// The controlling terminal of `pid` as a device path, e.g. "/dev/ttys005". nil when the
+/// process has no controlling terminal or it can't be read.
+public func ttyPath(of pid: Int32) -> String? {
+    var info = kinfo_proc()
+    var size = MemoryLayout<kinfo_proc>.stride
+    var mib: [Int32] = [CTL_KERN, KERN_PROC, KERN_PROC_PID, pid]
+    let rc = sysctl(&mib, u_int(mib.count), &info, &size, nil, 0)
+    guard rc == 0, size > 0, info.kp_eproc.e_tdev != -1,
+          let name = devname(info.kp_eproc.e_tdev, S_IFCHR) else { return nil }
+    return "/dev/" + String(cString: name)
+}
+
+/// Does `pid` descend from a process whose short command name is `name`? Walks the parent
+/// chain up to launchd (pid 1), with a depth cap so a cycle or bad read can't loop forever.
+public func hasAncestor(_ pid: Int32, named name: String) -> Bool {
+    var current = pid
+    for _ in 0..<32 {
+        guard let parent = parentPID(of: current), parent > 1 else { return false }
+        if processName(parent) == name { return true }
+        current = parent
+    }
+    return false
+}

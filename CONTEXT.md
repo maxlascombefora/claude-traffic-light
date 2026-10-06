@@ -59,6 +59,12 @@ A Session whose Status currently matches its Mute, so it does not contribute to 
 Aggregate Status. Still tracked, still listed in the Sessions Menu (shown struck-through);
 it simply doesn't drive the Light until its Status changes.
 
+**Orphaned Session**:
+A Session whose terminal tab is closed but whose `claude` process keeps running. Its process
+is alive, so it looks live, but nothing can show it to me. Hidden from the Light and the
+Sessions Menu when the terminal can tell us which ttys are open (Ghostty only, see ADR 0006).
+_Avoid_: zombie (a different OS concept), stale (that means past the TTL).
+
 **Sessions Menu**:
 The Overlay's right-click menu listing every live Session with its current Status and Title,
 from which a Session can be Muted or un-Muted. Headless (non-window) Sessions are omitted.

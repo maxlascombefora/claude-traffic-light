@@ -26,6 +26,11 @@ Only **real terminal windows** drive the Light: the reporter records whether the
 has a controlling terminal, and headless automation (`claude -p`, e.g. background agents) is
 ignored so it never pins the Light while you work in a window.
 
+When Ghostty closes a tab but the `claude` process in it keeps running, the overlay hides that
+**Orphaned Session**: it compares each Session's tty with the ttys of the open Ghostty
+terminals. This needs a Ghostty release after 1.3.1 (the AppleScript `tty` property). On older
+Ghostty it does nothing. See [ADR 0006](./docs/adr/0006-orphaned-sessions-by-tty.md).
+
 ## Requirements
 
 macOS + a Swift toolchain. Xcode Command Line Tools is enough (`xcode-select --install`);

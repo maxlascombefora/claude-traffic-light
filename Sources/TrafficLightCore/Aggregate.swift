@@ -117,3 +117,39 @@ public func pruneDead(
     }
     return live
 }
+
+/// The tty of every open Ghostty terminal, read at `takenAt` (Unix epoch seconds).
+public struct GhosttyTTYSnapshot: Sendable {
+    public let ttys: Set<String>
+    public let takenAt: Double
+
+    public init(ttys: Set<String>, takenAt: Double) {
+        self.ttys = ttys
+        self.takenAt = takenAt
+    }
+}
+
+/// Remove Orphaned Sessions: a Session whose process runs under Ghostty, but on a tty that no
+/// open Ghostty terminal has. This happens when Ghostty closes a tab but the `claude` process in
+/// it keeps running, so the pid check in `isLive` can't see that the Session is gone.
+///
+/// Every doubt keeps the Session, because hiding a live Session is worse than showing a closed
+/// one:
+/// - no snapshot (Ghostty not running, or too old to report terminal ttys): keep all;
+/// - no pid, or no `pidStart`: keep, since the process start can't be compared to the snapshot;
+/// - process started at or after the snapshot: keep, since its terminal may not be listed yet;
+/// - process not under Ghostty (another terminal app): keep;
+/// - tty unreadable: keep.
+public func dropOrphans(
+    _ records: [SessionRecord],
+    snapshot: GhosttyTTYSnapshot?,
+    tty: (Int32) -> String? = ttyPath(of:),
+    underGhostty: (Int32) -> Bool = { hasAncestor($0, named: "ghostty") }
+) -> [SessionRecord] {
+    guard let snapshot else { return records }
+    return records.filter { r in
+        guard let pid = r.pid, let start = r.pidStart, start < snapshot.takenAt,
+              underGhostty(pid), let path = tty(pid) else { return true }
+        return snapshot.ttys.contains(path)
+    }
+}

@@ -43,6 +43,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// Refresh counter, used to warm titles on a slower cadence than the 1s status poll.
     private var refreshTick = 0
 
+    /// The ttys of the open Ghostty terminals from the last scan, used to hide Orphaned Sessions
+    /// (ADR 0006). nil when unknown, which hides nothing. Main-thread only.
+    private var ghosttySnapshot: GhosttyTTYSnapshot?
+    /// Serial background queue for the Ghostty AppleScript query.
+    private let ghosttyQueue = DispatchQueue(label: "com.claude-traffic-light.ghostty-ttys", qos: .utility)
+    /// Guards against piling up overlapping Ghostty scans. Main-thread only.
+    private var ghosttyScanInFlight = false
+
     func applicationDidFinishLaunching(_ notification: Notification) {
         Paths.ensureDir(Paths.sessionsDir)
 
@@ -56,7 +64,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func refresh() {
         let now = Date().timeIntervalSince1970
-        let live = pruneDead(now: now, ttl: ttl)
+        let live = dropOrphans(pruneDead(now: now, ttl: ttl), snapshot: ghosttySnapshot)
         let (contributing, keptMutes) = applyMutes(live, mutes: muteMap)
         muteMap = keptMutes
         liveRecords = live
@@ -67,7 +75,29 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // Warm Session Titles off the main thread: immediately at launch (tick 1), then every
         // ~5s. The Sessions Menu reads only the cache, so it never blocks on disk.
         refreshTick += 1
-        if refreshTick % 5 == 1 { warmTitles(for: live.map(\.sessionId)) }
+        if refreshTick % 5 == 1 {
+            warmTitles(for: live.map(\.sessionId))
+            scanGhostty()
+        }
+    }
+
+    /// Read the open Ghostty terminals' ttys on the background queue into `ghosttySnapshot`, then
+    /// refresh so an Orphaned Session leaves the Light at once. No-op while a previous scan is
+    /// still running, unless `force` is set. `completion` runs on the main thread after the
+    /// refresh (immediately when the scan is skipped).
+    private func scanGhostty(force: Bool = false, completion: (() -> Void)? = nil) {
+        guard force || !ghosttyScanInFlight else { completion?(); return }
+        ghosttyScanInFlight = true
+        ghosttyQueue.async { [weak self] in
+            let snapshot = GhosttyTerminals.snapshot()
+            DispatchQueue.main.async {
+                guard let self else { return }
+                self.ghosttyScanInFlight = false
+                self.ghosttySnapshot = snapshot
+                self.refresh()
+                completion?()
+            }
+        }
     }
 
     /// Read Session Titles for `ids` on the background queue and swap them into `titleCache`.
@@ -114,12 +144,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     // MARK: - Sessions Menu
 
-    /// Sessions Menu → *Refresh Sessions*: rescan the sessions dir now and reread every Session
-    /// Title from its transcript, instead of waiting for the 1s status poll and the ~5s title
-    /// warm. `completion` runs on the main thread once the fresh titles are in the cache.
+    /// Sessions Menu → *Refresh Sessions*: rescan the open Ghostty terminals and the sessions
+    /// dir now, and reread every Session Title from its transcript, instead of waiting for the
+    /// 1s status poll and the ~5s title warm. `completion` runs on the main thread once the
+    /// fresh titles are in the cache.
     func refreshSessions(completion: @escaping () -> Void) {
-        refresh()
-        warmTitles(for: liveRecords.map(\.sessionId), force: true, completion: completion)
+        scanGhostty(force: true) { [weak self] in
+            guard let self else { return }
+            self.warmTitles(for: self.liveRecords.map(\.sessionId), force: true, completion: completion)
+        }
     }
 
     /// Toggle the Mute on a Session: unmute if muted, else mute at its current Status. Refreshes
