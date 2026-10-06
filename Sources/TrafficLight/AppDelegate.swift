@@ -72,10 +72,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     /// Read Session Titles for `ids` on the background queue and swap them into `titleCache`.
     /// Replacing the whole cache also drops entries for Sessions that have ended. No-op while a
-    /// previous warm is still running.
-    private func warmTitles(for ids: [String]) {
-        guard !titleWarmInFlight else { return }
-        guard !ids.isEmpty else { titleCache = [:]; return }
+    /// previous warm is still running, unless `force` is set. `completion` runs on the main
+    /// thread once the cache holds the result (immediately when the warm is skipped).
+    private func warmTitles(for ids: [String], force: Bool = false, completion: (() -> Void)? = nil) {
+        guard force || !titleWarmInFlight else { completion?(); return }
+        guard !ids.isEmpty else { titleCache = [:]; completion?(); return }
         titleWarmInFlight = true
         titleQueue.async { [weak self] in
             var found: [String: String] = [:]
@@ -86,6 +87,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 guard let self else { return }
                 self.titleWarmInFlight = false
                 self.titleCache = found
+                completion?()
             }
         }
     }
@@ -111,6 +113,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     // MARK: - Sessions Menu
+
+    /// Sessions Menu → *Refresh Sessions*: rescan the sessions dir now and reread every Session
+    /// Title from its transcript, instead of waiting for the 1s status poll and the ~5s title
+    /// warm. `completion` runs on the main thread once the fresh titles are in the cache.
+    func refreshSessions(completion: @escaping () -> Void) {
+        refresh()
+        warmTitles(for: liveRecords.map(\.sessionId), force: true, completion: completion)
+    }
 
     /// Toggle the Mute on a Session: unmute if muted, else mute at its current Status. Refreshes
     /// immediately so the Light responds without waiting for the next poll tick.

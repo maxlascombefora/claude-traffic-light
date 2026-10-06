@@ -223,6 +223,15 @@ final class LampView: NSView {
     // MARK: - right-click menu
 
     override func menu(for event: NSEvent) -> NSMenu? {
+        menuLocation = convert(event.locationInWindow, from: nil)
+        return buildMenu()
+    }
+
+    /// Where the last right-click landed, in view coordinates, so *Refresh Sessions* can reopen
+    /// the menu in the same spot.
+    private var menuLocation: NSPoint = .zero
+
+    private func buildMenu() -> NSMenu {
         let menu = NSMenu()
         menu.autoenablesItems = false
 
@@ -242,6 +251,7 @@ final class LampView: NSView {
         }
 
         menu.addItem(.separator())
+        addAction(to: menu, "Refresh Sessions", #selector(refreshSessions))
         menu.addItem(muteAllExceptMenuItem(sessions: sessions))
         menu.addItem(.separator())
         menu.addItem(sizeMenuItem())
@@ -401,6 +411,15 @@ final class LampView: NSView {
         case .yourTurn: return "Your Turn"
         case .working: return "Working"
         case .idle: return "Idle"
+        }
+    }
+
+    /// Picking an item closes the menu, so reopen it once the rescan is done: the point of
+    /// *Refresh Sessions* is to see the updated list.
+    @objc private func refreshSessions() {
+        (NSApp.delegate as? AppDelegate)?.refreshSessions { [weak self] in
+            guard let self else { return }
+            self.buildMenu().popUp(positioning: nil, at: self.menuLocation, in: self)
         }
     }
 
