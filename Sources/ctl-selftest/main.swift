@@ -155,6 +155,73 @@ check(kept([orec("unknown", pid: 2)], tty: { _ in nil }) == ["unknown"],
 check(kept([orec("closed", pid: 2)], snapshot: GhosttyTTYSnapshot(ttys: [], takenAt: 500)) == [],
       "Ghostty with no terminals open drops its sessions")
 
+print("daemon pty (Claude Code 2.1.306):")
+// Window `claude` 100 on ttys001 spawns `claude daemon run` 200 (no tty), which spawns
+// `claude bg-pty-host` 300 (no tty), which spawns `claude bg-spare` 400 on ttys002, a pty the
+// daemon made. The hooks run in 400. A closed-tab orphan 500 sits on ttys005 under zsh 501.
+let chainParent: [Int32: Int32] = [400: 300, 300: 200, 200: 100, 100: 50, 50: 1, 500: 501, 501: 1]
+let chainTTY: [Int32: String] = [400: "/dev/ttys002", 100: "/dev/ttys001", 50: "/dev/ttys001",
+                                 500: "/dev/ttys005", 501: "/dev/ttys005"]
+let parentOf: (Int32) -> Int32? = { chainParent[$0] }
+let ttyOf: (Int32) -> String? = { chainTTY[$0] }
+func keptChain(_ r: [SessionRecord], snapshot: GhosttyTTYSnapshot? = snap,
+               tty: @escaping (Int32) -> String? = ttyOf,
+               underGhostty: @escaping (Int32) -> Bool = ghostty) -> [String] {
+    dropOrphans(r, snapshot: snapshot, tty: tty, parent: parentOf, underGhostty: underGhostty)
+        .map(\.sessionId)
+}
+check(terminalTTY(of: 400, snapshot: snap, tty: ttyOf, parent: parentOf) == "/dev/ttys001",
+      "terminal tty resolves through the daemon chain to the window's tty")
+check(terminalTTY(of: 500, snapshot: snap, tty: ttyOf, parent: parentOf) == nil,
+      "chain with no open Ghostty tty resolves to nil")
+check(terminalTTY(of: 400, snapshot: snap, tty: ttyOf, parent: { _ in 400 }, maxHops: 3) == nil,
+      "hop cap stops a parent cycle")
+check(keptChain([orec("spare", pid: 400), orec("closed", pid: 500)]) == ["spare"],
+      "session on a daemon pty whose ancestor sits on an open Ghostty tty is kept, orphan dropped")
+check(keptChain([orec("closed", pid: 500)], snapshot: nil) == ["closed"],
+      "no snapshot keeps every session")
+check(keptChain([orec("new", pid: 500, start: 600)]) == ["new"],
+      "process started after the snapshot is kept")
+check(keptChain([orec("old", pid: 500, start: nil)]) == ["old"],
+      "record without pidStart is kept")
+check(keptChain([orec("vscode", pid: 500)], underGhostty: { _ in false }) == ["vscode"],
+      "session outside Ghostty is kept")
+check(keptChain([orec("unknown", pid: 300)]) == ["unknown"],
+      "own tty unreadable with no ancestor tty is kept")
+
+print("one record per terminal:")
+func trec(_ id: String, _ status: Status, pid: Int32, ageSeconds: Double) -> SessionRecord {
+    SessionRecord(sessionId: id, status: status, pid: pid, pidStart: 100,
+                  updatedAt: now - ageSeconds, cwd: nil)
+}
+func collapsed(_ r: [SessionRecord], snapshot: GhosttyTTYSnapshot? = snap,
+               underGhostty: @escaping (Int32) -> Bool = ghostty) -> [SessionRecord] {
+    collapseSameTerminal(r, snapshot: snapshot, tty: ttyOf, parent: parentOf, underGhostty: underGhostty)
+}
+// The exact bug: the window process 100 keeps its pre-restart record stuck on working, while
+// the hooks now report under the spare 400 on the same terminal.
+let stale = trec("stale", .working, pid: 100, ageSeconds: 600)
+let fresh = trec("fresh", .yourTurn, pid: 400, ageSeconds: 5)
+check(collapsed([stale, fresh]).map(\.sessionId) == ["fresh"],
+      "two records on the same terminal keep only the newer updatedAt")
+check(collapsed([fresh, stale]).map(\.sessionId) == ["fresh"],
+      "newest wins whatever the input order")
+check(aggregate(collapsed([stale, fresh]), now: now, alive: allAlive) == .yourTurn,
+      "stale working record no longer hides your-turn on the same terminal")
+let other = trec("other", .idle, pid: 500, ageSeconds: 1)
+let wide = GhosttyTTYSnapshot(ttys: ["/dev/ttys001", "/dev/ttys005"], takenAt: 500)
+check(collapsed([fresh, other], snapshot: wide).map(\.sessionId) == ["fresh", "other"],
+      "records on different terminals both survive")
+check(collapsed([fresh, other]).map(\.sessionId) == ["fresh", "other"],
+      "record with no resolvable terminal passes through")
+check(collapsed([stale, fresh], snapshot: nil).map(\.sessionId) == ["stale", "fresh"],
+      "no snapshot collapses nothing")
+check(collapsed([stale, fresh], underGhostty: { _ in false }).map(\.sessionId) == ["stale", "fresh"],
+      "sessions outside Ghostty are not collapsed")
+let noPid = SessionRecord(sessionId: "nopid", status: .yourTurn, pid: nil, updatedAt: now, cwd: nil)
+check(collapsed([stale, noPid]).map(\.sessionId) == ["stale", "nopid"],
+      "record without a pid passes through")
+
 print("auto-resume:")
 check(willAutoResume(hookJSON: ["background_tasks": [["id": "x", "status": "running"]]]),
       "running background task => session resumes on its own")

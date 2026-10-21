@@ -65,6 +65,12 @@ is alive, so it looks live, but nothing can show it to me. Hidden from the Light
 Sessions Menu when the terminal can tell us which ttys are open (Ghostty only, see ADR 0006).
 _Avoid_: zombie (a different OS concept), stale (that means past the TTL).
 
+**Terminal tty**:
+The tty of the open Ghostty terminal a Session runs in: the first tty on the Session's process
+or one of its ancestors that Ghostty lists. Not always the process's own tty, because Claude
+Code 2.1.306 runs hooks on a pty its daemon created (see ADR 0006). The Light keeps one Session
+per Terminal tty, the one with the newest `updated_at`.
+
 **Sessions Menu**:
 The Overlay's right-click menu listing every live Session with its current Status and Title,
 from which a Session can be Muted or un-Muted. Headless (non-window) Sessions are omitted.

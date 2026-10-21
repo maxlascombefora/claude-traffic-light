@@ -48,3 +48,28 @@ when:
 One Apple Event every ~5s, on a background queue, with the title warm
 ([ADR 0004](./0004-session-titles-from-transcript.md)). *Refresh Sessions* runs one at once.
 The per-Session checks in the 1s poll are a few `sysctl` reads.
+
+## Update 2026-10-21: the Claude Code daemon pty, and one record per terminal
+
+Claude Code 2.1.306 runs a Session through a daemon. The `claude` process in the terminal
+window (tty `/dev/ttys001`) spawns `claude daemon run` (no tty), which spawns
+`claude bg-pty-host` (no tty), which spawns `claude bg-spare` on `/dev/ttys002`, a pty the
+daemon created. After a session restart the hooks run inside that spare process, so the record
+carries its pid and its tty. Ghostty lists only the window's tty, never the daemon's pty. The
+old rule compared the process's own tty with the snapshot and dropped the live Session as an
+Orphaned Session.
+
+The match key is now the **terminal tty of the process chain**: `terminalTTY` walks from the
+record's pid up the parent chain (hop cap 32, stop at launchd) and returns the first tty that an
+open Ghostty terminal has. `dropOrphans` keeps a Session when that walk finds a tty. A real
+orphan still drops: after Ghostty closes the tab, no process in the chain sits on an open
+terminal. Every doubt in the list above still keeps the Session; "its tty can't be read" means
+the process's own tty.
+
+The same restart leaves a second problem. The window process keeps its pre-restart record,
+stuck on the last Status it reported, because every later hook reports under the new session
+id. That stale record then drives the Light. `collapseSameTerminal` groups the live records by
+their terminal tty and keeps only the record with the newest `updated_at` per terminal. The
+newest record on a terminal is the Session the user sees in that window. Records with no
+resolvable terminal pass through untouched. The overlay runs it right after `dropOrphans`,
+before Mutes. The Reporter stays stateless ([ADR 0003](./0003-hook-driven-detection.md)).

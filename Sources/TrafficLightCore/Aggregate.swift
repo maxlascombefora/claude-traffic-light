@@ -129,9 +129,35 @@ public struct GhosttyTTYSnapshot: Sendable {
     }
 }
 
-/// Remove Orphaned Sessions: a Session whose process runs under Ghostty, but on a tty that no
-/// open Ghostty terminal has. This happens when Ghostty closes a tab but the `claude` process in
-/// it keeps running, so the pid check in `isLive` can't see that the Session is gone.
+/// The open Ghostty terminal that `pid` runs in: the first tty in `snapshot` found on `pid` or
+/// on one of its ancestors, walking the parent chain up to launchd (pid 1) with a hop cap so a
+/// cycle or bad read can't loop forever. nil when nothing in the chain sits on an open Ghostty
+/// terminal.
+///
+/// The walk matters since Claude Code 2.1.306, which runs a Session through a daemon: the
+/// `claude` process in the terminal window spawns `claude daemon run` (no tty), which spawns the
+/// process the hooks run in on a pseudo-terminal the daemon created. That pty is not a Ghostty
+/// terminal, so the process's own tty never matches the snapshot; its ancestor in the window does.
+public func terminalTTY(
+    of pid: Int32,
+    snapshot: GhosttyTTYSnapshot,
+    tty: (Int32) -> String?,
+    parent: (Int32) -> Int32?,
+    maxHops: Int = 32
+) -> String? {
+    var current = pid
+    for _ in 0..<maxHops {
+        if let path = tty(current), snapshot.ttys.contains(path) { return path }
+        guard let next = parent(current), next > 1 else { return nil }
+        current = next
+    }
+    return nil
+}
+
+/// Remove Orphaned Sessions: a Session whose process runs under Ghostty, but whose process chain
+/// has no tty that an open Ghostty terminal has (see `terminalTTY`). This happens when Ghostty
+/// closes a tab but the `claude` process in it keeps running, so the pid check in `isLive` can't
+/// see that the Session is gone.
 ///
 /// Every doubt keeps the Session, because hiding a live Session is worse than showing a closed
 /// one:
@@ -139,17 +165,52 @@ public struct GhosttyTTYSnapshot: Sendable {
 /// - no pid, or no `pidStart`: keep, since the process start can't be compared to the snapshot;
 /// - process started at or after the snapshot: keep, since its terminal may not be listed yet;
 /// - process not under Ghostty (another terminal app): keep;
-/// - tty unreadable: keep.
+/// - the process's own tty unreadable: keep.
 public func dropOrphans(
     _ records: [SessionRecord],
     snapshot: GhosttyTTYSnapshot?,
     tty: (Int32) -> String? = ttyPath(of:),
+    parent: (Int32) -> Int32? = parentPID(of:),
     underGhostty: (Int32) -> Bool = { hasAncestor($0, named: "ghostty") }
 ) -> [SessionRecord] {
     guard let snapshot else { return records }
     return records.filter { r in
         guard let pid = r.pid, let start = r.pidStart, start < snapshot.takenAt,
-              underGhostty(pid), let path = tty(pid) else { return true }
-        return snapshot.ttys.contains(path)
+              underGhostty(pid), tty(pid) != nil else { return true }
+        return terminalTTY(of: pid, snapshot: snapshot, tty: tty, parent: parent) != nil
+    }
+}
+
+/// Keep one record per terminal: when several live records resolve to the same open Ghostty
+/// terminal (see `terminalTTY`), keep only the one with the newest `updatedAt`.
+///
+/// A Claude Code restart inside a window leaves the old Session's record behind: the window
+/// process is still alive, so `pruneDead` keeps the record, but every later hook reports under
+/// the new session id, so the old record never moves again. The newest record on a terminal is
+/// the Session the user sees in that window.
+///
+/// Records with no resolvable terminal (no snapshot, no pid, not under Ghostty, nothing in the
+/// chain on an open Ghostty terminal) pass through untouched. Input order is preserved.
+public func collapseSameTerminal(
+    _ records: [SessionRecord],
+    snapshot: GhosttyTTYSnapshot?,
+    tty: (Int32) -> String? = ttyPath(of:),
+    parent: (Int32) -> Int32? = parentPID(of:),
+    underGhostty: (Int32) -> Bool = { hasAncestor($0, named: "ghostty") }
+) -> [SessionRecord] {
+    guard let snapshot else { return records }
+    var terminalById: [String: String] = [:]
+    var newestByTerminal: [String: SessionRecord] = [:]
+    for r in records {
+        guard let pid = r.pid, underGhostty(pid),
+              let path = terminalTTY(of: pid, snapshot: snapshot, tty: tty, parent: parent)
+        else { continue }
+        terminalById[r.sessionId] = path
+        if let best = newestByTerminal[path], best.updatedAt >= r.updatedAt { continue }
+        newestByTerminal[path] = r
+    }
+    return records.filter { r in
+        guard let path = terminalById[r.sessionId] else { return true }
+        return newestByTerminal[path]?.sessionId == r.sessionId
     }
 }

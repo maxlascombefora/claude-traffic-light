@@ -64,7 +64,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func refresh() {
         let now = Date().timeIntervalSince1970
-        let live = dropOrphans(pruneDead(now: now, ttl: ttl), snapshot: ghosttySnapshot)
+        let live = collapseSameTerminal(
+            dropOrphans(pruneDead(now: now, ttl: ttl), snapshot: ghosttySnapshot),
+            snapshot: ghosttySnapshot)
         let (contributing, keptMutes) = applyMutes(live, mutes: muteMap)
         muteMap = keptMutes
         liveRecords = live

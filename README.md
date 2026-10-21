@@ -30,6 +30,9 @@ When Ghostty closes a tab but the `claude` process in it keeps running, the over
 **Orphaned Session**: it compares each Session's tty with the ttys of the open Ghostty
 terminals. This needs a Ghostty release after 1.3.1 (the AppleScript `tty` property). On older
 Ghostty it does nothing. See [ADR 0006](./docs/adr/0006-orphaned-sessions-by-tty.md).
+The tty check walks the process's parent chain, because Claude Code 2.1.306 runs hooks on a
+daemon pty, and the overlay keeps only the newest Session record per terminal, because a Claude
+Code restart leaves the old record behind.
 
 ## Requirements
 
