@@ -71,7 +71,9 @@ func report(_ status: Status) {
         cwd: json["cwd"] as? String,
         // A resolved process with no controlling terminal is headless automation (claude -p);
         // exclude it from the Light. Unknown (no pid) stays nil → treated as a real window.
-        interactive: proc.map { hasControllingTerminal($0.pid) },
+        // The Claude desktop app runs its sessions with no tty, so a session under it counts
+        // as a real window too.
+        interactive: proc.map { hasControllingTerminal($0.pid) || hasAncestor($0.pid, named: "Claude") },
         changedAt: changedAt
     )
     Paths.ensureDir(Paths.sessionsDir)
