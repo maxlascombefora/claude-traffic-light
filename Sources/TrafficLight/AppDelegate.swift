@@ -130,18 +130,28 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// matches the color currently shown, so long as it has a resolvable cwd. No-op if there's no
     /// such Session — every color is eligible, including Working/Idle ("which one's running?").
     func focusOldestMatchingCurrentColor() {
-        guard let candidate = focusCandidate(matching: currentAggregate, in: contributingRecords),
-              let cwd = candidate.cwd, !cwd.isEmpty else { return }
-        GhosttyFocus.focus(cwd: cwd, titleHint: titleCache[candidate.sessionId])
+        guard let candidate = focusCandidate(matching: currentAggregate, in: contributingRecords)
+        else { return }
+        focus(candidate)
     }
 
     /// Sessions Menu row → Focus: jump to that one specific Session directly, bypassing the
     /// color queue. Works even when Muted — an explicit pick from the menu, unlike the ambient
     /// click, isn't the ambient nagging Mute exists to silence.
     func focusSession(sessionId: String) {
-        guard let record = liveRecords.first(where: { $0.sessionId == sessionId }),
-              let cwd = record.cwd, !cwd.isEmpty else { return }
-        GhosttyFocus.focus(cwd: cwd, titleHint: titleCache[sessionId])
+        guard let record = liveRecords.first(where: { $0.sessionId == sessionId }) else { return }
+        focus(record)
+    }
+
+    /// A desktop app Session opens in the desktop app; any other Session focuses its Ghostty
+    /// terminal by cwd.
+    private func focus(_ record: SessionRecord) {
+        if let hostId = record.hostSessionId {
+            DesktopFocus.focus(hostSessionId: hostId)
+            return
+        }
+        guard let cwd = record.cwd, !cwd.isEmpty else { return }
+        GhosttyFocus.focus(cwd: cwd, titleHint: titleCache[record.sessionId])
     }
 
     // MARK: - Sessions Menu

@@ -48,6 +48,15 @@ func existingRecord(_ sid: String) -> SessionRecord? {
     return try? JSONDecoder().decode(SessionRecord.self, from: data)
 }
 
+/// The Claude desktop app's id for this Session, from the env the hook inherits. Only a
+/// well-formed `local_...` id is kept: the overlay builds a URL from it.
+func desktopSessionID() -> String? {
+    guard let id = ProcessInfo.processInfo.environment["CLAUDE_CODE_HOST_SESSION_ID"],
+          id.range(of: "^local_[A-Za-z0-9-]{1,64}$", options: .regularExpression) != nil
+    else { return nil }
+    return id
+}
+
 func report(_ status: Status) {
     guard let json = readHookJSON(),
           let sid = json["session_id"] as? String, !sid.isEmpty else { return }
@@ -74,7 +83,8 @@ func report(_ status: Status) {
         // The Claude desktop app runs its sessions with no tty, so a session under it counts
         // as a real window too.
         interactive: proc.map { hasControllingTerminal($0.pid) || hasAncestor($0.pid, named: "Claude") },
-        changedAt: changedAt
+        changedAt: changedAt,
+        hostSessionId: desktopSessionID()
     )
     Paths.ensureDir(Paths.sessionsDir)
     let encoder = JSONEncoder()

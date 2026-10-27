@@ -44,6 +44,10 @@ public struct SessionRecord: Codable, Sendable {
     /// records written before this field existed. See ADR 0005 — this is what "oldest Session in
     /// this color" (click-to-focus) sorts by, since `updatedAt` can't answer that.
     public var changedAt: Double?
+    /// The Claude desktop app's own id for this Session (`local_...`), read by the Reporter from
+    /// `CLAUDE_CODE_HOST_SESSION_ID`. It differs from `sessionId`. nil for a terminal Session or
+    /// an older record. Click-to-focus opens the desktop app at this Session when it is set.
+    public var hostSessionId: String?
 
     enum CodingKeys: String, CodingKey {
         case sessionId = "session_id"
@@ -54,10 +58,12 @@ public struct SessionRecord: Codable, Sendable {
         case cwd
         case interactive
         case changedAt = "changed_at"
+        case hostSessionId = "host_session_id"
     }
 
     public init(sessionId: String, status: Status, pid: Int32?, pidStart: Double? = nil,
-                updatedAt: Double, cwd: String?, interactive: Bool? = nil, changedAt: Double? = nil) {
+                updatedAt: Double, cwd: String?, interactive: Bool? = nil, changedAt: Double? = nil,
+                hostSessionId: String? = nil) {
         self.sessionId = sessionId
         self.status = status
         self.pid = pid
@@ -66,5 +72,6 @@ public struct SessionRecord: Codable, Sendable {
         self.cwd = cwd
         self.interactive = interactive
         self.changedAt = changedAt
+        self.hostSessionId = hostSessionId
     }
 }
