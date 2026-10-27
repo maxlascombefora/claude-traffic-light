@@ -239,7 +239,9 @@ final class LampView: NSView {
         let aggregate = model?.aggregate ?? .idle
         let sessions = model?.sessions ?? []
 
-        addDisabled(to: menu, "Light:  \(Self.dot(aggregate))  \(Self.name(aggregate))")
+        let away = (NSApp.delegate as? AppDelegate)?.awayMode ?? false
+        addDisabled(to: menu, "Light:  \(Self.dot(aggregate))  \(Self.name(aggregate))"
+                    + (away ? "  (Away)" : ""))
         menu.addItem(.separator())
 
         if sessions.isEmpty {
@@ -253,6 +255,7 @@ final class LampView: NSView {
         menu.addItem(.separator())
         addAction(to: menu, "Refresh Sessions", #selector(refreshSessions))
         menu.addItem(muteAllExceptMenuItem(sessions: sessions))
+        addAction(to: menu, "Away Mode", #selector(toggleAwayMode)).state = away ? .on : .off
         menu.addItem(.separator())
         menu.addItem(sizeMenuItem())
         addAction(to: menu, "Reset Position", #selector(resetPosition))
@@ -421,6 +424,10 @@ final class LampView: NSView {
             guard let self else { return }
             self.buildMenu().popUp(positioning: nil, at: self.menuLocation, in: self)
         }
+    }
+
+    @objc private func toggleAwayMode() {
+        (NSApp.delegate as? AppDelegate)?.toggleAwayMode()
     }
 
     @objc private func toggleMute(_ sender: NSMenuItem) {

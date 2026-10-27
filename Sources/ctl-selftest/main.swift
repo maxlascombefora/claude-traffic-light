@@ -106,6 +106,19 @@ let allMuted = applyMutes([blockedA, srec("b2", .working)],
 check(aggregate(allMuted.contributing, now: now, alive: allAlive) == .idle,
       "muting every contributor dims the Light")
 
+print("away mode:")
+check(awayAggregate([rec(.working, pid: 1), rec(.yourTurn, pid: 2)], now: now, alive: allAlive) == .working,
+      "away: a Working session beats Your Turn")
+check(awayAggregate([rec(.working, pid: 1), rec(.yourTurn, pid: 2), rec(.blocked, pid: 3)],
+                    now: now, alive: allAlive) == .blocked,
+      "away: Blocked still wins")
+check(awayAggregate([rec(.yourTurn, pid: 1), rec(.idle, pid: 2)], now: now, alive: allAlive) == .yourTurn,
+      "away: no Working session falls back to Your Turn")
+check(awayAggregate([rec(.working, pid: 42), rec(.yourTurn, pid: 7)],
+                    now: now, alive: { $0 == 7 }) == .yourTurn,
+      "away: a dead Working session does not keep the Light green")
+check(awayAggregate([], now: now) == .idle, "away: nothing live => idle")
+
 print("focus candidate:")
 check(focusCandidate(matching: .yourTurn, in: [
     rec(.yourTurn, changedAt: 500, cwd: "/a"),

@@ -46,6 +46,13 @@ The single Status chosen across all live Sessions to drive the Light, by worst-w
 urgency: Blocked > Your Turn > Working > Idle. Muted Sessions are excluded from this
 computation while their Mute holds.
 
+**Away Mode**:
+A switch on the Light, set from the Sessions Menu and remembered across launches. While it is
+on, any Working Session beats Your Turn in the Aggregate Status: Blocked > Working > Your Turn >
+Idle. The Light stays green while at least one Session is Working and none is Blocked, so I can
+look away until Claude stops or needs a permission.
+_Avoid_: focus mode, do-not-disturb (Blocked still shows).
+
 **Mute** (verb):
 To exclude a Session from the Aggregate Status until its Status changes. State-scoped, not
 time-scoped: a Mute is bound to the Status the Session held when muted, and clears the

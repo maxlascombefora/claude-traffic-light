@@ -32,6 +32,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// Aggregate Status from the most recent refresh (post-Mute), shown in the menu header.
     private var currentAggregate: Status = .idle
 
+    /// Away Mode: any Working Session beats Your Turn, so the Light stays green while Claude is
+    /// still doing something (see `awayAggregate`). Remembered across launches.
+    private(set) var awayMode = UserDefaults.standard.bool(forKey: AppDelegate.awayModeKey)
+    private static let awayModeKey = "awayMode"
+
     /// Cached Session Titles (session_id → title), read off the main thread so the Sessions
     /// Menu opens instantly (see ADR 0004 — titles come from Claude's transcript, which can be
     /// large). Main-thread only. Misses fall back to the cwd basename in `menuModel`.
@@ -71,7 +76,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         muteMap = keptMutes
         liveRecords = live
         contributingRecords = contributing
-        currentAggregate = aggregate(contributing, now: now, ttl: ttl)
+        currentAggregate = awayMode
+            ? awayAggregate(contributing, now: now, ttl: ttl)
+            : aggregate(contributing, now: now, ttl: ttl)
         for light in lights { light.status = currentAggregate }
 
         // Warm Session Titles off the main thread: immediately at launch (tick 1), then every
@@ -165,6 +172,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             guard let self else { return }
             self.warmTitles(for: self.liveRecords.map(\.sessionId), force: true, completion: completion)
         }
+    }
+
+    /// Sessions Menu → *Away Mode*: flip it, save it, and refresh so the Light responds at once.
+    func toggleAwayMode() {
+        awayMode.toggle()
+        UserDefaults.standard.set(awayMode, forKey: Self.awayModeKey)
+        refresh()
     }
 
     /// Toggle the Mute on a Session: unmute if muted, else mute at its current Status. Refreshes
