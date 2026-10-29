@@ -249,6 +249,46 @@ check(!willAutoResume(hookJSON: ["background_tasks": [], "session_crons": []]),
 check(!willAutoResume(hookJSON: ["session_id": "s"]),
       "payload without the arrays (older CLI) => your turn")
 
+print("long-lived background tasks:")
+let devServer: [String: Any] = [
+    "id": "b1", "type": "shell", "status": "running",
+    "description": "Restart the dev server on port 3009 in the background",
+    "command": "PID=$(lsof -nP -tiTCP:3009 -sTCP:LISTEN | head -1); [ -n \"$PID\" ] && kill \"$PID\"; sleep 2; exec node_modules/.bin/next dev -p 3009",
+]
+let ciWatch: [String: Any] = [
+    "id": "b2", "type": "shell", "status": "running",
+    "description": "Wait for CI on the PR",
+    "command": "gh pr checks 2448 --watch",
+]
+let subagent: [String: Any] = ["id": "b3", "type": "subagent", "status": "running", "agent_type": "Explore"]
+check(!willAutoResume(hookJSON: ["background_tasks": [devServer]]),
+      "a dev server never exits, so it does not hold green")
+check(willAutoResume(hookJSON: ["background_tasks": [ciWatch]]),
+      "a CI watch finishes, so it holds green")
+check(willAutoResume(hookJSON: ["background_tasks": [devServer, ciWatch]]),
+      "a CI watch next to a dev server still holds green")
+check(willAutoResume(hookJSON: ["background_tasks": [subagent]]),
+      "a subagent has no command and holds green")
+check(willAutoResume(hookJSON: ["background_tasks": [["id": "b4", "type": "shell", "status": "running"]]]),
+      "a shell task without a command keeps the benefit of the doubt")
+for cmd in [
+    "yarn dev", "npm run dev", "pnpm start", "bun run serve", "yarn storybook",
+    "./node_modules/.bin/vite", "vite dev --port 5173", "nodemon server.js",
+    "python manage.py runserver 0.0.0.0:8000", "docker compose up web", "docker-compose up",
+    "python3 -m http.server 8080", "tail -f /var/log/syslog", "tail -n0 -F app.log",
+    "yarn vitest --watch", "npx tsc --watch", "tsc -w -p .",
+] {
+    check(isLongLived(command: cmd), "long-lived: \(cmd)")
+}
+for cmd in [
+    "gh pr checks 2448 --watch", "scripts/ci_state.sh ForaTravel/fora-tools 2448 --wait",
+    "yarn build", "vite build", "vite preview", "docker compose up -d web", "yarn test",
+    "npx vitest run src/app", "tail -n 20 app.log", "npm run dev:build", "git push",
+    "sleep 600 && echo done", "nextcloud dev", "yarn start-release-notes",
+] {
+    check(!isLongLived(command: cmd), "finishes: \(cmd)")
+}
+
 print("session title:")
 let fm = FileManager.default
 let titleRoot = fm.temporaryDirectory
