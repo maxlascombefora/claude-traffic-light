@@ -59,6 +59,11 @@ final class LampView: NSView {
         didSet { if status != oldValue { needsDisplay = true } }
     }
 
+    /// Away Mode is on: the housing turns dark blue, so the Light shows which rule it follows.
+    var awayMode = false {
+        didSet { if awayMode != oldValue { needsDisplay = true } }
+    }
+
     /// The Light this view draws. Weak because the Light owns its panel, which owns this view.
     /// Every geometry action (drag, resize, *Size*, *Duplicate*) applies to this Light alone;
     /// Session/Mute actions are app-wide and go to the AppDelegate.
@@ -107,7 +112,9 @@ final class LampView: NSView {
         // Corner radius tracks the housing width so the pill silhouette survives resizing.
         let radius = housing.width * 0.26
         let housingPath = NSBezierPath(roundedRect: housing, xRadius: radius, yRadius: radius)
-        NSColor(calibratedWhite: 0.10, alpha: 0.92).setFill()
+        (awayMode
+            ? NSColor(calibratedRed: 0.03, green: 0.08, blue: 0.26, alpha: 0.92)
+            : NSColor(calibratedWhite: 0.10, alpha: 0.92)).setFill()
         housingPath.fill()
 
         let gap = (housing.height - CGFloat(lamps.count) * diameter) / CGFloat(lamps.count + 1)

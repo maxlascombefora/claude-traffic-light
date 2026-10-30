@@ -50,7 +50,8 @@ computation while their Mute holds.
 A switch on the Light, set from the Sessions Menu and remembered across launches. While it is
 on, any Working Session beats Your Turn in the Aggregate Status: Blocked > Working > Your Turn >
 Idle. The Light stays green while at least one Session is Working and none is Blocked, so I can
-look away until Claude stops or needs a permission.
+look away until Claude stops or needs a permission. The Light's housing turns dark blue
+while Away Mode is on.
 _Avoid_: focus mode, do-not-disturb (Blocked still shows).
 
 **Mute** (verb):

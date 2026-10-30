@@ -20,6 +20,11 @@ final class Light {
         set { view.status = newValue }
     }
 
+    var awayMode: Bool {
+        get { view.awayMode }
+        set { view.awayMode = newValue }
+    }
+
     var frame: NSRect { panel.frame }
     /// The screen the Light currently sits on, falling back to the main one while off-screen.
     var screen: NSScreen? { panel.screen ?? NSScreen.main }

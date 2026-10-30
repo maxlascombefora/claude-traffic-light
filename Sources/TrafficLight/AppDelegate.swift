@@ -79,7 +79,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         currentAggregate = awayMode
             ? awayAggregate(contributing, now: now, ttl: ttl)
             : aggregate(contributing, now: now, ttl: ttl)
-        for light in lights { light.status = currentAggregate }
+        for light in lights {
+            light.status = currentAggregate
+            light.awayMode = awayMode
+        }
 
         // Warm Session Titles off the main thread: immediately at launch (tick 1), then every
         // ~5s. The Sessions Menu reads only the cache, so it never blocks on disk.
@@ -258,6 +261,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let origin = source.duplicateOrigin(on: screen, avoiding: lights.map(\.frame))
         let light = Light(diameter: source.diameter, origin: origin, app: self)
         light.status = currentAggregate
+        light.awayMode = awayMode
         lights.append(light)
         saveLights()
     }
