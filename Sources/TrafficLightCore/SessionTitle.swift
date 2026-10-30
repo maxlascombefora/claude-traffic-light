@@ -32,6 +32,33 @@ public enum SessionTitle {
         return latest
     }
 
+    /// The title the Claude desktop app shows in its sidebar for `hostSessionId` (`local_...`),
+    /// or nil if none can be read. The app keeps one `<hostSessionId>.json` per Session two
+    /// levels under `desktopDir` (account, then organization), with the title in `title`. A
+    /// desktop app Session's transcript has no `ai-title`, so this is its only readable title.
+    public static func readDesktop(
+        hostSessionId: String,
+        desktopDir: URL = Paths.desktopSessionsDir
+    ) -> String? {
+        let fm = FileManager.default
+        let name = Paths.sanitize(hostSessionId) + ".json"
+        let accounts = (try? fm.contentsOfDirectory(at: desktopDir, includingPropertiesForKeys: nil)) ?? []
+        for account in accounts {
+            let orgs = (try? fm.contentsOfDirectory(at: account, includingPropertiesForKeys: nil)) ?? []
+            for org in orgs {
+                guard let data = try? Data(contentsOf: org.appendingPathComponent(name)),
+                      let meta = try? JSONDecoder().decode(DesktopMeta.self, from: data),
+                      let title = meta.title, !title.isEmpty else { continue }
+                return title
+            }
+        }
+        return nil
+    }
+
+    private struct DesktopMeta: Decodable {
+        let title: String?
+    }
+
     private struct TitleLine: Decodable {
         let type: String
         let aiTitle: String?

@@ -320,6 +320,18 @@ try? "{\"type\":\"user\"}".write(to: projDir.appendingPathComponent("\(noTitleSi
 check(SessionTitle.read(sessionId: noTitleSid, projectsDir: titleRoot) == nil,
       "transcript without an ai-title => nil")
 
+let desktopOrg = titleRoot.appendingPathComponent("desktop/acct/org", isDirectory: true)
+try? fm.createDirectory(at: desktopOrg, withIntermediateDirectories: true)
+try? "{\"sessionId\":\"local_abc\",\"title\":\"06 [blocked] Sidebar title\"}"
+    .write(to: desktopOrg.appendingPathComponent("local_abc.json"), atomically: true, encoding: .utf8)
+let desktopRoot = titleRoot.appendingPathComponent("desktop", isDirectory: true)
+check(SessionTitle.readDesktop(hostSessionId: "local_abc", desktopDir: desktopRoot) == "06 [blocked] Sidebar title",
+      "reads the desktop app's sidebar title")
+check(SessionTitle.readDesktop(hostSessionId: "local_missing", desktopDir: desktopRoot) == nil,
+      "missing desktop metadata => nil")
+check(SessionTitle.readDesktop(hostSessionId: "../acct/org/local_abc", desktopDir: desktopRoot) == nil,
+      "path-separator host id cannot escape the desktop dir")
+
 try? fm.removeItem(at: titleRoot)
 
 print(failures == 0 ? "\nALL PASSED" : "\n\(failures) FAILED")

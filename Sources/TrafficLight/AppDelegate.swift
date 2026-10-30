@@ -88,7 +88,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // ~5s. The Sessions Menu reads only the cache, so it never blocks on disk.
         refreshTick += 1
         if refreshTick % 5 == 1 {
-            warmTitles(for: live.map(\.sessionId))
+            warmTitles(for: live)
             scanGhostty()
         }
     }
@@ -112,18 +112,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    /// Read Session Titles for `ids` on the background queue and swap them into `titleCache`.
+    /// Read Session Titles for `records` on the background queue and swap them into `titleCache`.
     /// Replacing the whole cache also drops entries for Sessions that have ended. No-op while a
     /// previous warm is still running, unless `force` is set. `completion` runs on the main
     /// thread once the cache holds the result (immediately when the warm is skipped).
-    private func warmTitles(for ids: [String], force: Bool = false, completion: (() -> Void)? = nil) {
+    /// A desktop app Session takes its sidebar title; any other Session takes the transcript's
+    /// `ai-title`.
+    private func warmTitles(for records: [SessionRecord], force: Bool = false,
+                            completion: (() -> Void)? = nil) {
         guard force || !titleWarmInFlight else { completion?(); return }
-        guard !ids.isEmpty else { titleCache = [:]; completion?(); return }
+        guard !records.isEmpty else { titleCache = [:]; completion?(); return }
         titleWarmInFlight = true
+        let keys = records.map { ($0.sessionId, $0.hostSessionId) }
         titleQueue.async { [weak self] in
             var found: [String: String] = [:]
-            for id in ids {
-                if let title = SessionTitle.read(sessionId: id) { found[id] = title }
+            for (id, hostId) in keys {
+                let title = hostId.flatMap { SessionTitle.readDesktop(hostSessionId: $0) }
+                    ?? SessionTitle.read(sessionId: id)
+                if let title { found[id] = title }
             }
             DispatchQueue.main.async {
                 guard let self else { return }
@@ -173,7 +179,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func refreshSessions(completion: @escaping () -> Void) {
         scanGhostty(force: true) { [weak self] in
             guard let self else { return }
-            self.warmTitles(for: self.liveRecords.map(\.sessionId), force: true, completion: completion)
+            self.warmTitles(for: self.liveRecords, force: true, completion: completion)
         }
     }
 
@@ -214,7 +220,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// warm so it's correct on the next open.
     func menuModel() -> (aggregate: Status, sessions: [MenuSession]) {
         if liveRecords.contains(where: { titleCache[$0.sessionId] == nil }) {
-            warmTitles(for: liveRecords.map(\.sessionId))
+            warmTitles(for: liveRecords)
         }
 
         let labelled: [(rec: SessionRecord, base: String)] = liveRecords.map { r in

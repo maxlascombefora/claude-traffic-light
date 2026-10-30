@@ -26,6 +26,16 @@ public enum Paths {
         return home.appendingPathComponent(".claude/projects", isDirectory: true)
     }
 
+    /// The Claude desktop app's per-Session metadata, read only for the sidebar title of a
+    /// desktop app Session. Override: CLAUDE_TRAFFIC_LIGHT_DESKTOP_SESSIONS
+    public static var desktopSessionsDir: URL {
+        if let o = env["CLAUDE_TRAFFIC_LIGHT_DESKTOP_SESSIONS"], !o.isEmpty {
+            return URL(fileURLWithPath: o, isDirectory: true)
+        }
+        return home.appendingPathComponent("Library/Application Support/Claude/claude-code-sessions",
+                                           isDirectory: true)
+    }
+
     /// Claude Code's settings.json. Override: CLAUDE_TRAFFIC_LIGHT_SETTINGS
     public static var settingsPath: URL {
         if let o = env["CLAUDE_TRAFFIC_LIGHT_SETTINGS"], !o.isEmpty {
