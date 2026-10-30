@@ -219,7 +219,7 @@ check(collapsed([stale, fresh]).map(\.sessionId) == ["fresh"],
       "two records on the same terminal keep only the newer updatedAt")
 check(collapsed([fresh, stale]).map(\.sessionId) == ["fresh"],
       "newest wins whatever the input order")
-check(aggregate(collapsed([stale, fresh]), now: now, alive: allAlive) == .yourTurn,
+check(aggregate(collapsed([stale, fresh]), now: now, alive: allAlive, startTime: { _ in nil }) == .yourTurn,
       "stale working record no longer hides your-turn on the same terminal")
 let other = trec("other", .idle, pid: 500, ageSeconds: 1)
 let wide = GhosttyTTYSnapshot(ttys: ["/dev/ttys001", "/dev/ttys005"], takenAt: 500)
