@@ -118,6 +118,21 @@ check(awayAggregate([rec(.working, pid: 42), rec(.yourTurn, pid: 7)],
                     now: now, alive: { $0 == 7 }) == .yourTurn,
       "away: a dead Working session does not keep the Light green")
 check(awayAggregate([], now: now) == .idle, "away: nothing live => idle")
+check(awayAggregate([rec(.working, pid: 1), rec(.yourTurn, pid: 2)],
+                    now: now, minWorking: 2, alive: allAlive) == .yourTurn,
+      "away threshold 2: one Working session is not enough")
+check(awayAggregate([rec(.working, pid: 1), rec(.working, pid: 3), rec(.yourTurn, pid: 2)],
+                    now: now, minWorking: 2, alive: allAlive) == .working,
+      "away threshold 2: two Working sessions hold the Light green")
+check(awayAggregate([rec(.working, pid: 1), rec(.working, pid: 42), rec(.yourTurn, pid: 2)],
+                    now: now, minWorking: 2, alive: { $0 != 42 }) == .yourTurn,
+      "away threshold 2: a dead Working session does not count")
+check(awayAggregate([rec(.working, pid: 1), rec(.working, pid: 3), rec(.yourTurn, pid: 2), rec(.blocked, pid: 4)],
+                    now: now, minWorking: 2, alive: allAlive) == .blocked,
+      "away threshold 2: Blocked still wins")
+check(awayAggregate([rec(.working, pid: 1), rec(.yourTurn, pid: 2)],
+                    now: now, minWorking: 0, alive: allAlive) == .working,
+      "away threshold below 1 is treated as 1")
 
 print("focus candidate:")
 check(focusCandidate(matching: .yourTurn, in: [

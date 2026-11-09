@@ -66,22 +66,27 @@ public func aggregate(
     return live.map(\.status).max(by: { $0.priority < $1.priority }) ?? .idle
 }
 
-/// The Aggregate Status in Away Mode: Blocked still wins, but any Working Session then beats Your
-/// Turn, so the Light stays green while Claude is still doing something. With no Blocked and no
-/// Working Session, this is the normal worst-wins `aggregate`.
+/// Default Away Threshold: one Working Session is enough to hold the Light green.
+public let defaultAwayThreshold = 1
+
+/// The Aggregate Status in Away Mode: Blocked still wins, but `minWorking` or more live Working
+/// Sessions then beat Your Turn, so the Light stays green while enough of Claude is still doing
+/// something. With no Blocked and fewer Working Sessions than that, this is the normal worst-wins
+/// `aggregate`. A `minWorking` below 1 is treated as 1.
 public func awayAggregate(
     _ records: [SessionRecord],
     now: Double,
     ttl: Double = defaultTTLSeconds,
+    minWorking: Int = defaultAwayThreshold,
     alive: (Int32) -> Bool = processAlive,
     startTime: (Int32) -> Double? = processStartTime
 ) -> Status {
     let normal = aggregate(records, now: now, ttl: ttl, alive: alive, startTime: startTime)
     guard normal == .yourTurn else { return normal }
-    let anyWorking = records.contains {
+    let working = records.filter {
         $0.status == .working && isLive($0, now: now, ttl: ttl, alive: alive, startTime: startTime)
-    }
-    return anyWorking ? .working : .yourTurn
+    }.count
+    return working >= max(1, minWorking) ? .working : .yourTurn
 }
 
 /// The Session to jump to when a Light showing `color` is clicked: the oldest — by `changedAt`,

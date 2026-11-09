@@ -48,11 +48,18 @@ computation while their Mute holds.
 
 **Away Mode**:
 A switch on the Light, set from the Sessions Menu and remembered across launches. While it is
-on, any Working Session beats Your Turn in the Aggregate Status: Blocked > Working > Your Turn >
-Idle. The Light stays green while at least one Session is Working and none is Blocked, so I can
-look away until Claude stops or needs a permission. The Light's housing turns dark blue
-while Away Mode is on.
+on, enough Working Sessions (see Away Threshold) beat Your Turn in the Aggregate Status:
+Blocked > Working > Your Turn > Idle. The Light stays green while at least the Away Threshold
+of Sessions are Working and none is Blocked, so I can look away until Claude stops or needs a
+permission. The Light's housing turns dark blue while Away Mode is on.
 _Avoid_: focus mode, do-not-disturb (Blocked still shows).
+
+**Away Threshold**:
+How many Working Sessions it takes to hold the Light green in Away Mode. Set from the Sessions
+Menu (*Away Threshold* submenu, 1 to 5) and remembered across launches. Default 1: a single
+Working Session beats Your Turn. At 2, one Session finishing turns the Light yellow even while
+another still works, so I return before the last one stops. Blocked wins regardless.
+_Avoid_: green count, working minimum.
 
 **Mute** (verb):
 To exclude a Session from the Aggregate Status until its Status changes. State-scoped, not

@@ -263,6 +263,7 @@ final class LampView: NSView {
         addAction(to: menu, "Refresh Sessions", #selector(refreshSessions))
         menu.addItem(muteAllExceptMenuItem(sessions: sessions))
         addAction(to: menu, "Away Mode", #selector(toggleAwayMode)).state = away ? .on : .off
+        menu.addItem(awayThresholdMenuItem())
         menu.addItem(.separator())
         menu.addItem(sizeMenuItem())
         addAction(to: menu, "Reset Position", #selector(resetPosition))
@@ -363,6 +364,33 @@ final class LampView: NSView {
         return item
     }
 
+    /// *Away Threshold* submenu: how many Working Sessions it takes to hold the Light green in
+    /// Away Mode. The current value is check-marked; a stored value past the list is appended so
+    /// it still shows.
+    private func awayThresholdMenuItem() -> NSMenuItem {
+        let current = (NSApp.delegate as? AppDelegate)?.awayThreshold ?? defaultAwayThreshold
+        var counts = Array(1...5)
+        if !counts.contains(current) { counts.append(current) }
+
+        let submenu = NSMenu()
+        submenu.autoenablesItems = false
+        for count in counts {
+            let title = count == 1 ? "1 Working Session" : "\(count) Working Sessions"
+            let item = NSMenuItem(title: title, action: #selector(applyAwayThreshold(_:)),
+                                  keyEquivalent: "")
+            item.target = self
+            item.isEnabled = true
+            item.representedObject = count
+            item.state = count == current ? .on : .off
+            submenu.addItem(item)
+        }
+
+        let item = NSMenuItem(title: "Away Threshold", action: nil, keyEquivalent: "")
+        item.isEnabled = true
+        item.submenu = submenu
+        return item
+    }
+
     /// *Size* submenu: presets plus a reset, for when the corner grip is too fiddly. The current
     /// diameter is check-marked, including sizes reached by dragging that land on a preset.
     private func sizeMenuItem() -> NSMenuItem {
@@ -435,6 +463,11 @@ final class LampView: NSView {
 
     @objc private func toggleAwayMode() {
         (NSApp.delegate as? AppDelegate)?.toggleAwayMode()
+    }
+
+    @objc private func applyAwayThreshold(_ sender: NSMenuItem) {
+        guard let count = sender.representedObject as? Int else { return }
+        (NSApp.delegate as? AppDelegate)?.setAwayThreshold(count)
     }
 
     @objc private func toggleMute(_ sender: NSMenuItem) {

@@ -37,6 +37,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private(set) var awayMode = UserDefaults.standard.bool(forKey: AppDelegate.awayModeKey)
     private static let awayModeKey = "awayMode"
 
+    /// Away Threshold: how many Working Sessions it takes to beat Your Turn in Away Mode. One by
+    /// default; a missing or invalid stored value also reads as one. Remembered across launches.
+    private(set) var awayThreshold = max(1, UserDefaults.standard.integer(forKey: AppDelegate.awayThresholdKey))
+    private static let awayThresholdKey = "awayThreshold"
+
     /// Cached Session Titles (session_id → title), read off the main thread so the Sessions
     /// Menu opens instantly (see ADR 0004 — titles come from Claude's transcript, which can be
     /// large). Main-thread only. Misses fall back to the cwd basename in `menuModel`.
@@ -77,7 +82,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         liveRecords = live
         contributingRecords = contributing
         currentAggregate = awayMode
-            ? awayAggregate(contributing, now: now, ttl: ttl)
+            ? awayAggregate(contributing, now: now, ttl: ttl, minWorking: awayThreshold)
             : aggregate(contributing, now: now, ttl: ttl)
         for light in lights {
             light.status = currentAggregate
@@ -187,6 +192,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func toggleAwayMode() {
         awayMode.toggle()
         UserDefaults.standard.set(awayMode, forKey: Self.awayModeKey)
+        refresh()
+    }
+
+    /// Sessions Menu → *Away Threshold*: set how many Working Sessions hold the Light green, save
+    /// it, and refresh so the Light responds at once. Values below 1 are clamped to 1.
+    func setAwayThreshold(_ count: Int) {
+        awayThreshold = max(1, count)
+        UserDefaults.standard.set(awayThreshold, forKey: Self.awayThresholdKey)
         refresh()
     }
 
