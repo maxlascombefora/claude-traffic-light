@@ -292,6 +292,8 @@ for cmd in [
     "python manage.py runserver 0.0.0.0:8000", "docker compose up web", "docker-compose up",
     "python3 -m http.server 8080", "tail -f /var/log/syslog", "tail -n0 -F app.log",
     "yarn vitest --watch", "npx tsc --watch", "tsc -w -p .",
+    "./dev", "cd /Users/me/fora-tools/.claude/worktrees/x && ./dev", "exec bin/dev --port 3005",
+    "bash scripts/dev.sh",
 ] {
     check(isLongLived(command: cmd), "long-lived: \(cmd)")
 }
@@ -300,6 +302,8 @@ for cmd in [
     "yarn build", "vite build", "vite preview", "docker compose up -d web", "yarn test",
     "npx vitest run src/app", "tail -n 20 app.log", "npm run dev:build", "git push",
     "sleep 600 && echo done", "nextcloud dev", "yarn start-release-notes",
+    "cd ~/Desktop/dev && yarn test", "git checkout dev", "./dev-build", "scripts/dev/seed.sh",
+    "ls ./dev",
 ] {
     check(!isLongLived(command: cmd), "finishes: \(cmd)")
 }

@@ -39,6 +39,9 @@ public let longLivedCommandPatterns: [String] = [
     #"(^|[\s/;&|])next\s+dev\b"#,                          // next dev -p 3009
     #"(^|[\s/;&|])vite\b(?!\s+(build|preview))"#,          // vite, vite dev, vite serve
     #"(^|[\s/;&|])(yarn|npm|pnpm|bun)\s+(run\s+)?(dev|start|serve|storybook)(?![\w:.-])"#,
+    // A repo's own `dev` script in command position: ./dev, bin/dev, exec scripts/dev.sh.
+    // The path is required, so `cd ~/code/dev && yarn test` and `git checkout dev` do not match.
+    #"(^|[;&|])\s*(exec\s+)?((ba|z)?sh\s+)?([\w.~-]*/)+dev(\.sh)?(?![\w:./-])"#,
     #"(^|[\s/;&|])nodemon\b"#,
     #"(^|[\s/;&|])webpack(-dev-server|\s+serve)\b"#,
     #"\bmanage\.py\s+runserver\b"#,
