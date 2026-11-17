@@ -365,8 +365,8 @@ final class LampView: NSView {
     }
 
     /// *Away Threshold* submenu: how many Working Sessions it takes to hold the Light green in
-    /// Away Mode. The current value is check-marked; a stored value past the list is appended so
-    /// it still shows.
+    /// Away Mode. The title shows the current value in parentheses. The current value is also
+    /// check-marked; a stored value past the list is appended so it still shows.
     private func awayThresholdMenuItem() -> NSMenuItem {
         let current = (NSApp.delegate as? AppDelegate)?.awayThreshold ?? defaultAwayThreshold
         var counts = Array(1...5)
@@ -385,7 +385,7 @@ final class LampView: NSView {
             submenu.addItem(item)
         }
 
-        let item = NSMenuItem(title: "Away Threshold", action: nil, keyEquivalent: "")
+        let item = NSMenuItem(title: "Away Threshold (\(current))", action: nil, keyEquivalent: "")
         item.isEnabled = true
         item.submenu = submenu
         return item
